@@ -209,7 +209,7 @@ APP_PORT=3000
 DB_HOST=localhost
 DB_PORT=5432
 DB_USER=postgres
-DB_PASSWORD=ahmed
+DB_PASSWORD=password_db
 DB_NAME=laporsarpras_db
 DB_DIALECT=postgres
 

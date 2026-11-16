@@ -1,0 +1,19 @@
+MODEL CLASSIFIER EVALUATION REPORT - LAPORSARPRAS AI
+Algorithm: Logistic Regression (L-BFGS)
+Accuracy: 88.75%
+
+Classification Report:
+              precision    recall  f1-score   support
+
+      Rendah       1.00      0.29      0.44         7
+      Sedang       0.95      0.82      0.88        22
+      Tinggi       0.86      1.00      0.93        51
+
+    accuracy                           0.89        80
+   macro avg       0.94      0.70      0.75        80
+weighted avg       0.90      0.89      0.87        80
+
+Confusion Matrix:
+[[51  0  0]
+ [ 4 18  0]
+ [ 4  1  2]]

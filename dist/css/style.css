@@ -1,0 +1,399 @@
+/* ==========================================================================
+   Suara Kampus - Stylesheet
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   1. Variabel Tema & Desain Dasar (Design Tokens)
+   -------------------------------------------------------------------------- */
+:root {
+  /* Warna Terang (Light Mode) */
+  --bg: #F5F6F2;
+  --sf: #FFFFFF;
+  --ink: #17262B;
+  --mut: #5B6B70;
+  --line: #DCE1DC;
+  
+  /* Aksen & Brand */
+  --ac: #0F6B5C;
+  --acbg: #DDEFEA;
+  --on: #FFFFFF;
+  
+  /* Status & Prioritas */
+  --hi: #A8261D;    /* Tinggi / Merah */
+  --hibg: #F9E1DE;
+  --md: #8A5A00;    /* Sedang / Kuning-Cokelat */
+  --mdbg: #FBEACB;
+  --lo: #256B43;    /* Rendah / Hijau */
+  --lobg: #DDF0E3;
+
+  color-scheme: light;
+  box-sizing: border-box;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Dukungan Mode Gelap Otomatis (System Dark Mode) */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0F1819;
+    --sf: #172326;
+    --ink: #E8EFEC;
+    --mut: #9DB0AF;
+    --line: #2A3B3E;
+    --ac: #5CC7B0;
+    --acbg: #17382F;
+    --on: #0F1819;
+    --hi: #F2A29B;
+    --hibg: #4A1F1C;
+    --md: #F0C063;
+    --mdbg: #43320D;
+    --lo: #8BD3A5;
+    --lobg: #17361F;
+    color-scheme: dark;
+  }
+}
+
+/* Override Mode Gelap Manual via Atribut */
+:root[data-theme="dark"] {
+  --bg: #0F1819;
+  --sf: #172326;
+  --ink: #E8EFEC;
+  --mut: #9DB0AF;
+  --line: #2A3B3E;
+  --ac: #5CC7B0;
+  --acbg: #17382F;
+  --on: #0F1819;
+  --hi: #F2A29B;
+  --hibg: #4A1F1C;
+  --md: #F0C063;
+  --mdbg: #43320D;
+  --lo: #8BD3A5;
+  --lobg: #17361F;
+  color-scheme: dark;
+}
+
+/* --------------------------------------------------------------------------
+   2. Reset & Tipografi Dasar
+   -------------------------------------------------------------------------- */
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-padding-top: env(safe-area-inset-top, 0px);
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 16px/1.6 "Public Sans", system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3 {
+  font-family: "Bricolage Grotesque", "Public Sans", system-ui, sans-serif;
+  line-height: 1.2;
+  margin: 0;
+}
+
+h1 {
+  font-size: clamp(28px, 6vw, 40px);
+  font-weight: 700;
+}
+
+h2 {
+  font-size: 22px;
+  font-weight: 700;
+}
+
+h3 {
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.mut {
+  color: var(--mut);
+  font-size: 14px;
+  margin: 0;
+}
+
+/* --------------------------------------------------------------------------
+   3. Tata Letak (Layout)
+   -------------------------------------------------------------------------- */
+.wrap {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 16px;
+}
+
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0 16px;
+}
+
+.brand {
+  font: 700 18px "Bricolage Grotesque", system-ui, sans-serif;
+}
+
+.row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.grid2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+/* --------------------------------------------------------------------------
+   4. Komponen Kartu (Cards & Containers)
+   -------------------------------------------------------------------------- */
+.card {
+  background: var(--sf);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 12px;
+}
+
+.stat {
+  background: var(--sf);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.stat b {
+  display: block;
+  font: 700 26px "Bricolage Grotesque", system-ui, sans-serif;
+  margin-top: 4px;
+}
+
+/* --------------------------------------------------------------------------
+   5. Form & Tombol (Forms & Inputs)
+   -------------------------------------------------------------------------- */
+button, select, input, textarea {
+  font: inherit;
+  color: var(--ink);
+}
+
+button {
+  cursor: pointer;
+  border: 1px solid var(--line);
+  background: var(--sf);
+  border-radius: 8px;
+  padding: 8px 14px;
+  min-height: 40px;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+button:hover {
+  border-color: var(--mut);
+}
+
+button.pri {
+  background: var(--ac);
+  color: var(--on);
+  border-color: var(--ac);
+  font-weight: 500;
+}
+
+button.chip {
+  min-height: 34px;
+  padding: 4px 12px;
+  font-size: 14px;
+}
+
+button.chip.on {
+  background: var(--acbg);
+  color: var(--ac);
+  border-color: var(--ac);
+}
+
+input, select, textarea {
+  width: 100%;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg);
+}
+
+select.sm {
+  width: auto;
+  padding: 6px 8px;
+  font-size: 14px;
+}
+
+:focus-visible {
+  outline: 2px solid var(--ac);
+  outline-offset: 2px;
+}
+
+label {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  margin: 12px 0 4px;
+}
+
+.err {
+  color: var(--hi);
+  font-size: 13px;
+  margin: 4px 0 0;
+}
+
+/* --------------------------------------------------------------------------
+   6. Badge & Indikator Status (Badges & Progress)
+   -------------------------------------------------------------------------- */
+.bd {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 2px 9px;
+  border-radius: 99px;
+  white-space: nowrap;
+}
+
+/* Badge Prioritas */
+.Tinggi {
+  background: var(--hibg);
+  color: var(--hi);
+}
+
+.Sedang {
+  background: var(--mdbg);
+  color: var(--md);
+}
+
+.Rendah {
+  background: var(--lobg);
+  color: var(--lo);
+}
+
+.none {
+  background: var(--bg);
+  color: var(--mut);
+  border: 1px solid var(--line);
+}
+
+/* Badge Status Laporan */
+.Diterima {
+  background: var(--bg);
+  color: var(--mut);
+  border: 1px solid var(--line);
+}
+
+.Diproses {
+  background: var(--acbg);
+  color: var(--ac);
+}
+
+.Selesai {
+  background: var(--lobg);
+  color: var(--lo);
+}
+
+/* Indikator Progres Tahapan (Steps) */
+.steps {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.steps i {
+  flex: 1;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--line);
+}
+
+.steps i.f {
+  background: var(--ac);
+}
+
+/* --------------------------------------------------------------------------
+   7. Tab Segmen Navigasi
+   -------------------------------------------------------------------------- */
+.seg {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  padding: 4px;
+  background: var(--line);
+  border-radius: 10px;
+  margin: 8px 0 14px;
+}
+
+.seg button {
+  border: 0;
+  background: transparent;
+}
+
+.seg button.on {
+  background: var(--sf);
+  font-weight: 500;
+}
+
+/* --------------------------------------------------------------------------
+   8. Tampilan Pindai QR Code
+   -------------------------------------------------------------------------- */
+.qrbox {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  text-align: center;
+  padding: 24px 0;
+}
+
+.qr {
+  width: min(240px, 70vw);
+  padding: 16px;
+  background: #FFFFFF;
+  color: #111111;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  cursor: pointer;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+
+.qr:hover {
+  border-color: var(--ac);
+  transform: scale(1.02);
+}
+
+/* --------------------------------------------------------------------------
+   9. Pesan Notifikasi (Toast)
+   -------------------------------------------------------------------------- */
+#toast {
+  position: sticky;
+  bottom: 12px;
+  margin-top: 8px;
+  text-align: center;
+  pointer-events: none;
+}
+
+#toast span {
+  display: inline-block;
+  background: var(--ink);
+  color: var(--bg);
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}

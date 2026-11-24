@@ -85,11 +85,10 @@ export function TriagePanel({ emergencyList, onRefresh }: TriagePanelProps) {
                 🚨 {item.deskripsi_kerusakan}
               </div>
 
-              {item.EmergencyVerification && (
+              {(item.emergencyVerification || item.EmergencyVerification) && (
                 <div className="text-[10px] text-[#5F6E6A] space-y-0.5 mb-3">
-                  <div>Jenis Risiko: <strong>{item.EmergencyVerification.jenis_bahaya}</strong></div>
-                  <div>Durasi Masalah: <strong>{item.EmergencyVerification.durasi_masalah}</strong></div>
-                  <div>Pelapor: <strong>{item.User?.nama_lengkap || 'Mahasiswa'}</strong> ({item.User?.nim})</div>
+                  <div>Durasi Masalah: <strong>{(item.emergencyVerification || item.EmergencyVerification)?.durasi_masalah}</strong></div>
+                  <div>Pelapor: <strong>{(item.reporter || item.User)?.nama_lengkap || 'Mahasiswa'}</strong> ({(item.reporter || item.User)?.nim})</div>
                 </div>
               )}
             </div>

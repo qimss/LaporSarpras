@@ -40,15 +40,17 @@ export const predictWithLocalML = (text) => {
 // 2. ANALISIS DENGAN GOOGLE GEMINI API (LLM)
 export const analyzeWithGemini = async (kode_lokasi, nama_fasilitas, deskripsi) => {
   const apiKey = process.env.GEMINI_API_KEY;
-  let modelName = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
+  let modelName = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 
-  // Jika model kustom tidak valid di publik, gunakan model flash aktif
-  if (modelName.includes('hydrogen') || modelName.includes('tunedModels')) {
-    modelName = 'gemini-1.5-flash';
+  // Jika model lama 1.5-flash dipanggil, otomatis gunakan model 2.5-flash yang aktif
+  if (modelName === 'gemini-1.5-flash') {
+    modelName = 'gemini-2.5-flash';
   }
 
-  if (!apiKey || apiKey.startsWith('AIzaSy_masukkan')) {
-    console.log('ℹ️ Menggunakan Engine ML Terlatih Lokal (API Key belum diisi).');
+  const isGoogleKey = apiKey && (apiKey.startsWith('AQ.') || apiKey.startsWith('AIzaSy'));
+
+  if (!isGoogleKey || apiKey.startsWith('AIzaSy_masukkan')) {
+    console.log('ℹ️ Menggunakan Engine ML Terlatih Lokal / Rule Engine (API Key Gemini belum diset dengan key Google valid AIzaSy... / AQ...).');
     return null;
   }
 
@@ -67,7 +69,7 @@ Balas HANYA dengan JSON valid sesuai skema yang diminta:
 `;
 
   try {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent`;
     const response = await axios.post(
       url,
       {
@@ -77,7 +79,13 @@ Balas HANYA dengan JSON valid sesuai skema yang diminta:
           temperature: 0.2,
         },
       },
-      { timeout: 7000 }
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'x-goog-api-key': apiKey,
+        },
+        timeout: 7000,
+      }
     );
 
     const candidate = response.data?.candidates?.[0]?.content?.parts?.[0]?.text;
@@ -85,7 +93,12 @@ Balas HANYA dengan JSON valid sesuai skema yang diminta:
       return JSON.parse(candidate);
     }
   } catch (error) {
-    console.warn('⚠️ Gemini API tidak merespons, beralih ke Model Terlatih Lokal:', error.message);
+    const errDetails = error.response?.data?.error?.message || error.message;
+    if (error.response?.status === 403) {
+      console.warn(`⚠️ Google Gemini Cloud mengembalikan 403 (Permission Denied: "${errDetails}"). Pastikan "Generative Language API" sudah di-Enable pada Google Cloud Console untuk project API Key ini.`);
+    } else {
+      console.warn('⚠️ Gemini API tidak merespons, beralih ke Model Terlatih Lokal:', errDetails);
+    }
   }
   return null;
 };

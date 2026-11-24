@@ -75,8 +75,8 @@ export function ClusterTable({ clusteredReports, onRefresh }: ClusterTableProps)
       ) : (
         <div className="space-y-4">
           {clusteredReports.map((master) => {
-            const ai = master.AIAnalysisResult;
-            const childs = master.ChildReports || [];
+            const ai = master.aiAnalysis || master.AIAnalysisResult;
+            const childs = master.similarReports || master.ChildReports || [];
             const similarCount = ai?.jumlah_laporan_serupa || childs.length;
 
             return (
@@ -161,7 +161,7 @@ export function ClusterTable({ clusteredReports, onRefresh }: ClusterTableProps)
                             <span className="font-mono font-bold text-[#0F6B5C] mr-2">#{ch.ticket_number}</span>
                             <span className="text-[#14201E]">{ch.deskripsi_kerusakan}</span>
                             <span className="text-[#8A9692] ml-2 font-mono text-[10px]">
-                              ({ch.User?.nama_lengkap || 'Mahasiswa'})
+                              ({(ch.reporter || ch.User)?.nama_lengkap || 'Mahasiswa'})
                             </span>
                           </div>
                           <button

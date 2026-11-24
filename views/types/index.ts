@@ -52,14 +52,26 @@ export interface Report {
     nama_lengkap: string;
     nim: string;
   };
+  reporter?: {
+    nama_lengkap: string;
+    nim: string;
+  };
   EmergencyVerification?: EmergencyVerification;
+  emergencyVerification?: EmergencyVerification;
   AIAnalysisResult?: AIAnalysisResult;
+  aiAnalysis?: AIAnalysisResult;
   ParentReport?: {
     ticket_number: string;
     nama_fasilitas: string;
   };
+  parentReport?: {
+    ticket_number: string;
+    nama_fasilitas: string;
+  };
   ChildReports?: Report[];
+  similarReports?: Report[];
   StatusLogs?: ReportStatusLog[];
+  statusLogs?: ReportStatusLog[];
 }
 
 export interface KPIs {

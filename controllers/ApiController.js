@@ -305,12 +305,12 @@ export class ApiController {
       }
 
       let newStatus = 'Diproses';
-      let verifStatus = 'Verified';
+      let verifStatus = 'Terkonfirmasi Darurat';
       let logKet = catatan || 'Laporan darurat terverifikasi oleh Admin Sarpras. Ditangani dengan SLA 1-2 Jam.';
 
       if (action === 'downgrade') {
         newStatus = 'Diterima';
-        verifStatus = 'Downgraded';
+        verifStatus = 'Diturunkan ke Biasa';
         logKet = catatan || 'Klaim darurat diturunkan menjadi prioritas reguler setelah peninjauan staf.';
       }
 
@@ -319,9 +319,8 @@ export class ApiController {
 
       if (report.emergencyVerification) {
         report.emergencyVerification.status_verifikasi = verifStatus;
-        report.emergencyVerification.diverifikasi_oleh = req.session.user.user_id;
-        report.emergencyVerification.catatan_petugas = logKet;
-        report.emergencyVerification.waktu_verifikasi = new Date();
+        report.emergencyVerification.admin_id = req.session.user.user_id;
+        report.emergencyVerification.verified_at = new Date();
         await report.emergencyVerification.save();
       }
 

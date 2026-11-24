@@ -30,8 +30,8 @@ export class AuthController {
         return res.redirect('/login?error=NIM atau ID Pengguna tidak terdaftar.');
       }
 
-      // Verifikasi kata sandi
-      if (user.password_hash !== password && password !== 'password123') {
+      // Verifikasi kata sandi murni hanya dari basis data
+      if (user.password_hash !== password) {
         return res.redirect('/login?error=Kata sandi salah.');
       }
 

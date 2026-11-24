@@ -135,6 +135,14 @@ async function runAllTests() {
     const pass1_7 = res1_7.status === 401 && res1_7.data.success === false;
     recordTest('SKENARIO 1', '1.7 Login Ditolak - Kata Sandi Salah', pass1_7, `Status: ${res1_7.status}`);
 
+    // 1.7b Keamanan: Uji Coba Bypass Kata Sandi Hardcoded (admin123 / mahasiswa123) Wajib Ditolak
+    const res1_7b = await anonClient.post('/auth/login', {
+      identifier: '20240140151',
+      password: 'admin123',
+    });
+    const pass1_7b = res1_7b.status === 401 && res1_7b.data.success === false;
+    recordTest('SKENARIO 1', '1.7b Keamanan: Percobaan Bypass Backdoor (admin123) Ditolak', pass1_7b, `Status: ${res1_7b.status} Unauthorized`);
+
     // 1.8 Login Gagal - Akun Tidak Terdaftar
     const res1_8 = await anonClient.post('/auth/login', {
       identifier: '99999999999',

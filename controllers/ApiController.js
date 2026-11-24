@@ -62,6 +62,7 @@ export class ApiController {
         return res.status(401).json({ success: false, message: 'NIM atau Email tidak terdaftar dalam sistem.' });
       }
 
+      // Verifikasi kata sandi murni hanya dari basis data
       if (user.password_hash !== password) {
         return res.status(401).json({ success: false, message: 'Kata sandi salah.' });
       }

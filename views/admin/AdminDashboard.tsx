@@ -4,12 +4,14 @@ import { KPIs, Report } from '../types';
 import { TriagePanel } from './TriagePanel';
 import { ClusterTable } from './ClusterTable';
 import { ReportList } from './ReportList';
+import MemberManager from './MemberManager';
 
 interface AdminDashboardProps {
   onViewTracking: (ticketNumber: string) => void;
 }
 
 export function AdminDashboard({ onViewTracking }: AdminDashboardProps) {
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'anggota'>('dashboard');
   const [kpis, setKpis] = useState<KPIs>({ total: 0, urgent: 0, inProgress: 0, completed: 0 });
   const [emergencyList, setEmergencyList] = useState<Report[]>([]);
   const [clusteredReports, setClusteredReports] = useState<Report[]>([]);
@@ -154,28 +156,64 @@ export function AdminDashboard({ onViewTracking }: AdminDashboardProps) {
           </p>
         </div>
 
-        <button
-          type="button"
-          disabled={aiRunning}
-          onClick={handleRunAI}
-          style={{
-            padding: '12px 20px',
-            borderRadius: '11px',
-            border: 'none',
-            backgroundColor: aiRunning ? '#64748B' : '#0F6B54',
-            color: '#FFFFFF',
-            fontSize: '14.5px',
-            fontWeight: 700,
-            cursor: aiRunning ? 'not-allowed' : 'pointer',
-            boxShadow: '0 4px 12px rgba(15, 107, 84, 0.24)',
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '8px',
-          }}
-        >
-          <span>🤖</span>
-          <span>{aiRunning ? 'Siklus AI Sedang Berjalan…' : 'Jalankan Siklus AI Sekarang'}</span>
-        </button>
+        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
+          <button
+            type="button"
+            onClick={() => setActiveTab('dashboard')}
+            style={{
+              padding: '11px 16px',
+              borderRadius: '11px',
+              border: '1.5px solid #0F6B54',
+              backgroundColor: activeTab === 'dashboard' ? '#0F6B54' : '#FFFFFF',
+              color: activeTab === 'dashboard' ? '#FFFFFF' : '#0F6B54',
+              fontSize: '14px',
+              fontWeight: 700,
+              cursor: 'pointer',
+            }}
+          >
+            Dashboard
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('anggota')}
+            style={{
+              padding: '11px 16px',
+              borderRadius: '11px',
+              border: '1.5px solid #0F6B54',
+              backgroundColor: activeTab === 'anggota' ? '#0F6B54' : '#FFFFFF',
+              color: activeTab === 'anggota' ? '#FFFFFF' : '#0F6B54',
+              fontSize: '14px',
+              fontWeight: 700,
+              cursor: 'pointer',
+            }}
+          >
+            + Kelola Anggota
+          </button>
+
+          <button
+            type="button"
+            disabled={aiRunning}
+            onClick={handleRunAI}
+            style={{
+              padding: '12px 20px',
+              borderRadius: '11px',
+              border: 'none',
+              backgroundColor: aiRunning ? '#64748B' : '#0F6B54',
+              color: '#FFFFFF',
+              fontSize: '14.5px',
+              fontWeight: 700,
+              cursor: aiRunning ? 'not-allowed' : 'pointer',
+              boxShadow: '0 4px 12px rgba(15, 107, 84, 0.24)',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '8px',
+            }}
+          >
+            <span>🤖</span>
+            <span>{aiRunning ? 'Siklus AI Sedang Berjalan…' : 'Jalankan Siklus AI Sekarang'}</span>
+          </button>
+        </div>
       </div>
 
       {error && (
@@ -194,101 +232,107 @@ export function AdminDashboard({ onViewTracking }: AdminDashboardProps) {
         </div>
       )}
 
-      {/* KPI Cards Grid (Responsif HP & Desktop) */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))',
-          gap: '14px',
-        }}
-      >
-        <div
-          style={{
-            backgroundColor: '#FFFFFF',
-            border: '1.5px solid #CBD5E1',
-            borderRadius: '14px',
-            padding: '18px 20px',
-            boxShadow: '0 4px 12px rgba(15, 23, 42, 0.04)',
-          }}
-        >
-          <div style={{ fontSize: '13.5px', fontWeight: 700, color: '#334155', marginBottom: '6px' }}>
-            Total Pengaduan
-          </div>
-          <div style={{ fontSize: '30px', fontWeight: 800, color: '#0F172A' }}>{kpis.total}</div>
-        </div>
-
-        <div
-          style={{
-            backgroundColor: '#FEF2F2',
-            border: '1.5px solid #FCA5A5',
-            borderRadius: '14px',
-            padding: '18px 20px',
-            boxShadow: '0 4px 12px rgba(220, 38, 38, 0.05)',
-          }}
-        >
-          <div style={{ fontSize: '13.5px', fontWeight: 700, color: '#B91C1C', marginBottom: '6px' }}>
-            Dugaan Mendesak
-          </div>
-          <div style={{ fontSize: '30px', fontWeight: 800, color: '#DC2626' }}>{kpis.urgent}</div>
-        </div>
-
-        <div
-          style={{
-            backgroundColor: '#FFFBEB',
-            border: '1.5px solid #FCD34D',
-            borderRadius: '14px',
-            padding: '18px 20px',
-            boxShadow: '0 4px 12px rgba(217, 119, 6, 0.05)',
-          }}
-        >
-          <div style={{ fontSize: '13.5px', fontWeight: 700, color: '#92400E', marginBottom: '6px' }}>
-            Sedang Dikerjakan
-          </div>
-          <div style={{ fontSize: '30px', fontWeight: 800, color: '#B45309' }}>{kpis.inProgress}</div>
-        </div>
-
-        <div
-          style={{
-            backgroundColor: '#F0FDF4',
-            border: '1.5px solid #86EFAC',
-            borderRadius: '14px',
-            padding: '18px 20px',
-            boxShadow: '0 4px 12px rgba(22, 163, 74, 0.05)',
-          }}
-        >
-          <div style={{ fontSize: '13.5px', fontWeight: 700, color: '#166534', marginBottom: '6px' }}>
-            Selesai Diperbaiki
-          </div>
-          <div style={{ fontSize: '30px', fontWeight: 800, color: '#15803D' }}>{kpis.completed}</div>
-        </div>
-      </div>
-
-      {loading ? (
-        <div
-          style={{
-            textAlign: 'center',
-            padding: '40px',
-            fontSize: '15px',
-            fontWeight: 600,
-            color: '#334155',
-          }}
-        >
-          Memuat data operasional Sarpras…
-        </div>
+      {activeTab === 'anggota' ? (
+        <MemberManager onNotify={(msg, type) => setPopup({ msg, type })} />
       ) : (
         <>
-          {/* Panel Triage Bahaya Red Alert */}
-          <TriagePanel emergencyList={emergencyList} onRefresh={loadDashboardData} />
+          {/* KPI Cards Grid (Responsif HP & Desktop) */}
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))',
+              gap: '14px',
+            }}
+          >
+            <div
+              style={{
+                backgroundColor: '#FFFFFF',
+                border: '1.5px solid #CBD5E1',
+                borderRadius: '14px',
+                padding: '18px 20px',
+                boxShadow: '0 4px 12px rgba(15, 23, 42, 0.04)',
+              }}
+            >
+              <div style={{ fontSize: '13.5px', fontWeight: 700, color: '#334155', marginBottom: '6px' }}>
+                Total Pengaduan
+              </div>
+              <div style={{ fontSize: '30px', fontWeight: 800, color: '#0F172A' }}>{kpis.total}</div>
+            </div>
 
-          {/* Tabel Pengelompokan Kluster AI */}
-          <ClusterTable clusteredReports={clusteredReports} onRefresh={loadDashboardData} />
+            <div
+              style={{
+                backgroundColor: '#FEF2F2',
+                border: '1.5px solid #FCA5A5',
+                borderRadius: '14px',
+                padding: '18px 20px',
+                boxShadow: '0 4px 12px rgba(220, 38, 38, 0.05)',
+              }}
+            >
+              <div style={{ fontSize: '13.5px', fontWeight: 700, color: '#B91C1C', marginBottom: '6px' }}>
+                Dugaan Mendesak
+              </div>
+              <div style={{ fontSize: '30px', fontWeight: 800, color: '#DC2626' }}>{kpis.urgent}</div>
+            </div>
 
-          {/* Tabel Semua Laporan Raw */}
-          <ReportList
-            reports={allReports}
-            onRefresh={loadDashboardData}
-            onViewTracking={onViewTracking}
-          />
+            <div
+              style={{
+                backgroundColor: '#FFFBEB',
+                border: '1.5px solid #FCD34D',
+                borderRadius: '14px',
+                padding: '18px 20px',
+                boxShadow: '0 4px 12px rgba(217, 119, 6, 0.05)',
+              }}
+            >
+              <div style={{ fontSize: '13.5px', fontWeight: 700, color: '#92400E', marginBottom: '6px' }}>
+                Sedang Dikerjakan
+              </div>
+              <div style={{ fontSize: '30px', fontWeight: 800, color: '#B45309' }}>{kpis.inProgress}</div>
+            </div>
+
+            <div
+              style={{
+                backgroundColor: '#F0FDF4',
+                border: '1.5px solid #86EFAC',
+                borderRadius: '14px',
+                padding: '18px 20px',
+                boxShadow: '0 4px 12px rgba(22, 163, 74, 0.05)',
+              }}
+            >
+              <div style={{ fontSize: '13.5px', fontWeight: 700, color: '#166534', marginBottom: '6px' }}>
+                Selesai Diperbaiki
+              </div>
+              <div style={{ fontSize: '30px', fontWeight: 800, color: '#15803D' }}>{kpis.completed}</div>
+            </div>
+          </div>
+
+          {loading ? (
+            <div
+              style={{
+                textAlign: 'center',
+                padding: '40px',
+                fontSize: '15px',
+                fontWeight: 600,
+                color: '#334155',
+              }}
+            >
+              Memuat data operasional Sarpras…
+            </div>
+          ) : (
+            <>
+              {/* Panel Triage Bahaya Red Alert */}
+              <TriagePanel emergencyList={emergencyList} onRefresh={loadDashboardData} />
+
+              {/* Tabel Pengelompokan Kluster AI */}
+              <ClusterTable clusteredReports={clusteredReports} onRefresh={loadDashboardData} />
+
+              {/* Tabel Semua Laporan Raw */}
+              <ReportList
+                reports={allReports}
+                onRefresh={loadDashboardData}
+                onViewTracking={onViewTracking}
+              />
+            </>
+          )}
         </>
       )}
     </div>

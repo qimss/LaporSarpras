@@ -28,4 +28,10 @@ router.post('/admin/batch-ai', ApiController.runBatchAI);
 router.post('/admin/reports/:reportId/status', ApiController.updateStatus);
 router.post('/admin/reports/:reportId/unlink', ApiController.unlinkCluster);
 
+// ==========================================
+// 4. Manajemen Anggota (Admin)
+// ==========================================
+router.get('/users', ApiController.getUsers);
+router.post('/users', ApiController.createUser);
+
 export default router;

@@ -354,8 +354,99 @@ export class ApiController {
   }
 
   // ==========================================
-  // 3. ADMIN SARPRAS (Control Center)
+  // 3. ADMIN SARPRAS (Control Center & Anggota)
   // ==========================================
+  static async getUsers(req, res) {
+    try {
+      if (req.session?.user?.role !== 'admin') {
+        return res.status(403).json({
+          success: false,
+          message: 'Akses ditolak: Memerlukan hak akses Admin Sarpras.',
+        });
+      }
+
+      const users = await User.findAll({
+        attributes: ['user_id', 'nim', 'nama_lengkap', 'email', 'role'],
+        order: [['user_id', 'DESC']],
+      });
+
+      return res.json({ success: true, users });
+    } catch (error) {
+      console.error('API getUsers Error:', error);
+      return res.status(500).json({ success: false, message: error.message });
+    }
+  }
+
+  static async createUser(req, res) {
+    try {
+      if (req.session?.user?.role !== 'admin') {
+        return res.status(403).json({
+          success: false,
+          message: 'Akses ditolak: Memerlukan hak akses Admin Sarpras.',
+        });
+      }
+
+      const nim = String(req.body.nim || '').trim();
+      const nama_lengkap = String(req.body.nama_lengkap || '').replace(/[<>"'/`]/g, '').trim();
+      const email = String(req.body.email || '').trim().toLowerCase();
+      const password = String(req.body.password || '').trim();
+      const role = req.body.role === 'admin' ? 'admin' : 'mahasiswa';
+
+      if (!nim || !nama_lengkap || !email || !password) {
+        return res.status(400).json({
+          success: false,
+          message: 'NIM/ID, Nama Lengkap, Email, dan Kata Sandi wajib diisi.',
+        });
+      }
+
+      if (password.length < 6) {
+        return res.status(400).json({
+          success: false,
+          message: 'Kata sandi minimal 6 karakter.',
+        });
+      }
+
+      const existing = await User.findOne({
+        where: {
+          [Op.or]: [{ nim }, { email }],
+        },
+      });
+
+      if (existing) {
+        return res.status(409).json({
+          success: false,
+          message: 'NIM/ID atau Email sudah terdaftar dalam sistem.',
+        });
+      }
+
+      const newUser = await User.create({
+        nim,
+        nama_lengkap,
+        email,
+        role,
+        password_hash: password,
+      });
+
+      return res.status(201).json({
+        success: true,
+        message: 'Anggota baru berhasil ditambahkan.',
+        user: {
+          user_id: newUser.user_id,
+          nim: newUser.nim,
+          nama_lengkap: newUser.nama_lengkap,
+          email: newUser.email,
+          role: newUser.role,
+        },
+      });
+    } catch (error) {
+      console.error('API createUser Error:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Gagal menambahkan anggota: ' + error.message,
+      });
+    }
+  }
+
   static async getAdminDashboard(req, res) {
     try {
       if (req.session?.user?.role !== 'admin') {

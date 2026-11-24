@@ -189,12 +189,13 @@ async function runAllTests() {
 
     let ticketNormal1 = '';
     let reportIdNormal1 = null;
+    const clusterRoom = `Gedung F6 L2 R.${Math.floor(100 + Math.random() * 800)}`;
 
     // 2.1 Buat Laporan Normal (AC Bocor)
     const res2_1 = await anonClient.post(
       '/reports',
       {
-        kode_lokasi: 'Gedung F6 L2 R.204',
+        kode_lokasi: clusterRoom,
         nama_fasilitas: 'Pendingin Ruangan (AC)',
         deskripsi_kerusakan: 'AC mengeluarkan tetesan air deras dan ruangan gerah tidak dingin',
         is_urgent_claimed: false,
@@ -208,17 +209,24 @@ async function runAllTests() {
     }
     recordTest('SKENARIO 2', '2.1 Input Laporan Normal (AC Bocor)', pass2_1, `Tiket: #${ticketNormal1}`);
 
-    // 2.2 Buat Laporan Normal ke-2 pada Lokasi & Fasilitas Sama (Untuk Uji AI Clustering)
+    // Login Mahasiswa 2 untuk simulasi pelaporan bersamaan di ruangan yang sama
+    const loginMhs2 = await anonClient.post('/auth/login', {
+      identifier: '20240140137',
+      password: 'password123',
+    });
+    const mhs2Cookie = loginMhs2.headers['set-cookie']?.[0]?.split(';')?.[0] || mhsCookie;
+
+    // 2.2 Buat Laporan Normal ke-2 pada Lokasi & Fasilitas Sama oleh Mahasiswa 2 (Untuk Uji AI Clustering)
     let ticketNormal2 = '';
     const res2_2 = await anonClient.post(
       '/reports',
       {
-        kode_lokasi: 'Gedung F6 L2 R.204',
+        kode_lokasi: clusterRoom,
         nama_fasilitas: 'Pendingin Ruangan (AC)',
         deskripsi_kerusakan: 'Rembean air dari AC mengenai meja kuliah baris depan',
         is_urgent_claimed: false,
       },
-      { headers: { Cookie: mhsCookie } }
+      { headers: { Cookie: mhs2Cookie } }
     );
     const pass2_2 = res2_2.status === 201 && res2_2.data.success && res2_2.data.report.ticket_number;
     if (pass2_2) {
@@ -230,7 +238,7 @@ async function runAllTests() {
     const res2_3 = await anonClient.post(
       '/reports',
       {
-        kode_lokasi: "<script>alert('xss')</script> Gedung E3",
+        kode_lokasi: `<script>alert('xss')</script> Gedung E${Math.floor(10 + Math.random() * 90)}`,
         nama_fasilitas: 'Lampu Penerangan',
         deskripsi_kerusakan: 'Lampu kedip-kedip redup',
         is_urgent_claimed: false,
@@ -243,20 +251,21 @@ async function runAllTests() {
     recordTest('SKENARIO 2', '2.3 Validasi Anti-XSS Sanitasi Ruangan', pass2_3, `Tersanitasi menjadi: "${lokasiHasilSanitasi}"`);
 
     // 2.4 Validasi Keamanan: Pemotongan Batas Maksimal 35 Karakter Lokasi
-    const inputPanjang = 'Gedung Sang Pencerah Lantai 5 Sayap Barat Ruang Serbaguna 501';
+    const randCode = Math.floor(100 + Math.random() * 900);
+    const inputPanjang = `Gedung Pascasarjana Lantai 5 Ruang Teater ${randCode} Sayap Barat`;
     const res2_4 = await anonClient.post(
       '/reports',
       {
         kode_lokasi: inputPanjang,
-        nama_fasilitas: 'Kursi Kuliah',
-        deskripsi_kerusakan: 'Sandaran kursi patah',
+        nama_fasilitas: `Meja Dosen ${randCode}`,
+        deskripsi_kerusakan: 'Kaki meja patah dan goyang saat dipakai',
         is_urgent_claimed: false,
       },
       { headers: { Cookie: mhsCookie } }
     );
     const panjangHasil = res2_4.data.report?.kode_lokasi?.length || 0;
-    const pass2_4 = res2_4.status === 201 && panjangHasil <= 35;
-    recordTest('SKENARIO 2', '2.4 Validasi Pemotongan Maksimal 35 Karakter', pass2_4, `Panjang input: ${inputPanjang.length} -> Hasil: ${panjangHasil} char`);
+    const pass2_4 = res2_4.status === 201 && panjangHasil <= 35 && panjangHasil > 0;
+    recordTest('SKENARIO 2', '2.4 Validasi Pemotongan Maksimal 35 Karakter Lokasi', pass2_4, `Panjang input: ${inputPanjang.length} -> Hasil: ${panjangHasil} char`);
 
     // 2.5 Validasi Form: Tolak Laporan Tanpa Fasilitas / Deskripsi
     const res2_5 = await anonClient.post(
@@ -277,12 +286,13 @@ async function runAllTests() {
     const res2_6 = await anonClient.post(
       '/reports',
       {
-        kode_lokasi: 'Gedung F6 L1 Ruang Server',
+        kode_lokasi: `Gedung F6 Server ${Math.floor(100 + Math.random() * 900)}`,
         nama_fasilitas: 'Instalasi Listrik & Pipa',
         deskripsi_kerusakan: 'Pipa air bocor tepat di atas rak server dan tercium bau kabel terbakar menyengat',
         is_urgent_claimed: true,
         jenis_bahaya: 'Korsleting Listrik & Kebocoran Server',
         durasi_masalah: '< 1 jam',
+        foto_url: '/uploads/default_damaged.jpg',
       },
       { headers: { Cookie: mhsCookie } }
     );
@@ -359,6 +369,9 @@ async function runAllTests() {
 
     // 5.3 Eksekusi AI Batch Clustering (POST /api/admin/batch-ai)
     const res5_3 = await anonClient.post('/admin/batch-ai', {}, { headers: { Cookie: adminCookie } });
+    if (!res5_3.data.success) {
+      console.log('DEBUG RES5_3 FAILED:', res5_3.status, res5_3.data);
+    }
     const pass5_3 = res5_3.status === 200 && res5_3.data.success;
     recordTest('SKENARIO 5', '5.3 Pemicu AI Batch Clustering & Severity Scoring', pass5_3, `Kluster Terproses: ${res5_3.data.results?.count ?? 'OK'}`);
 

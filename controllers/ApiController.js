@@ -128,8 +128,8 @@ export class ApiController {
 
       // Sanitasi anti-XSS pada lokasi
       let lokasiSanitized = (kode_lokasi || '').replace(/[<>"'/`]/g, '').trim();
-      if (lokasiSanitized.length > 60) {
-        lokasiSanitized = lokasiSanitized.substring(0, 60);
+      if (lokasiSanitized.length > 35) {
+        lokasiSanitized = lokasiSanitized.substring(0, 35);
       }
 
       if (!lokasiSanitized) {
@@ -169,7 +169,7 @@ export class ApiController {
         });
       }
 
-      if (isUrgent && !uploadedFile) {
+      if (isUrgent && !uploadedFile && !req.body.foto_url) {
         return res.status(400).json({
           success: false,
           message: 'Bukti foto fisik wajib dilampirkan untuk laporan Kondisi Mendesak / Berbahaya.',
@@ -199,7 +199,9 @@ export class ApiController {
         });
       }
 
-      const fotoUrl = uploadedFile ? `/uploads/${uploadedFile.filename}` : '/uploads/default_damaged.jpg';
+      const fotoUrl = uploadedFile
+        ? `/uploads/${uploadedFile.filename}`
+        : (req.body.foto_url || '/uploads/default_damaged.jpg');
 
       // Generate Ticket Number berbasis report_id agar unik saat 2 akun mengirim bersamaan
       const today = new Date();

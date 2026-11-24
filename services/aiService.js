@@ -129,7 +129,7 @@ Balas HANYA dengan JSON valid sesuai skema yang diminta:
           'Content-Type': 'application/json',
           'x-goog-api-key': apiKey,
         },
-        timeout: 3000,
+        timeout: 7000,
       }
     );
 
@@ -282,7 +282,7 @@ export const processDailyBatch = async () => {
         parent.deskripsi_kerusakan
       );
 
-      await AIAnalysisResult.create(
+      await AIAnalysisResult.upsert(
         {
           report_id: parent.report_id,
           rekomendasi_prioritas: aiResult.prioritas,

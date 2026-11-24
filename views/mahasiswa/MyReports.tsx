@@ -31,91 +31,226 @@ export function MyReports({ onSelectTicket, onNewReport }: MyReportsProps) {
     loadReports();
   }, []);
 
+  const getStatusBadgeStyle = (status: string) => {
+    if (status === 'Selesai') {
+      return { backgroundColor: '#DCFCE7', color: '#166534', border: '1px solid #86EFAC' };
+    }
+    if (status === 'Diproses') {
+      return { backgroundColor: '#FEF3C7', color: '#92400E', border: '1px solid #FCD34D' };
+    }
+    if (status === 'Dugaan Mendesak') {
+      return { backgroundColor: '#FEE2E2', color: '#B91C1C', border: '1px solid #FCA5A5' };
+    }
+    return { backgroundColor: '#ECFDF5', color: '#065F46', border: '1px solid #A7F3D0' };
+  };
+
   return (
-    <div className="max-w-2xl mx-auto py-4 px-3 sm:px-4">
-      <div className="flex items-center justify-between mb-4">
+    <div style={{ width: '100%', maxWidth: '720px', margin: '0 auto', padding: '16px 16px 44px' }}>
+      {/* Header Judul & Tombol Tambah */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '12px',
+          flexWrap: 'wrap',
+          marginBottom: '20px',
+        }}
+      >
         <div>
-          <h1 className="text-lg sm:text-xl font-bold text-[#14201E]">Daftar Pengaduan Saya</h1>
-          <p className="text-xs text-[#5F6E6A]">Riwayat pengaduan fasilitas yang telah Anda laporkan.</p>
+          <h1 style={{ margin: 0, fontSize: '22px', fontWeight: 800, color: '#0F172A' }}>
+            Daftar Pengaduan Saya
+          </h1>
+          <p style={{ margin: '4px 0 0', fontSize: '14px', color: '#334155', lineHeight: 1.5 }}>
+            Riwayat pengaduan fasilitas yang telah Anda laporkan.
+          </p>
         </div>
+
         <button
           type="button"
           onClick={onNewReport}
-          className="h-[36px] px-3 bg-[#0F6B5C] hover:bg-[#0c574a] text-white text-xs font-semibold rounded-[8px] transition-colors shadow-xs"
+          style={{
+            padding: '11px 18px',
+            backgroundColor: '#0F6B54',
+            color: '#FFFFFF',
+            fontSize: '14.5px',
+            fontWeight: 700,
+            border: 'none',
+            borderRadius: '11px',
+            cursor: 'pointer',
+            boxShadow: '0 4px 10px rgba(15, 107, 84, 0.2)',
+            whiteSpace: 'nowrap',
+          }}
         >
           + Buat Laporan Baru
         </button>
       </div>
 
+      {/* Alert Error Kontras Tinggi */}
       {error && (
-        <div className="p-3 mb-4 rounded-[10px] bg-red-50 border border-red-200 text-xs text-red-700">
-          {error}
+        <div
+          style={{
+            padding: '14px 16px',
+            marginBottom: '18px',
+            borderRadius: '12px',
+            backgroundColor: '#DC2626',
+            color: '#FFFFFF',
+            fontSize: '14.5px',
+            fontWeight: 700,
+            boxShadow: '0 6px 16px rgba(220, 38, 38, 0.25)',
+          }}
+        >
+          ⚠️ {error}
         </div>
       )}
 
       {loading ? (
-        <div className="text-center py-12 text-xs text-[#8A9692]">Memuat laporan Anda…</div>
+        <div
+          style={{
+            textAlign: 'center',
+            padding: '48px 16px',
+            fontSize: '15px',
+            fontWeight: 600,
+            color: '#334155',
+          }}
+        >
+          Memuat laporan Anda…
+        </div>
       ) : reports.length === 0 ? (
-        <div className="bg-white border border-[#DCE1DC] rounded-[14px] p-8 text-center shadow-xs">
-          <span className="text-3xl block mb-2">📋</span>
-          <h2 className="text-sm font-bold text-[#14201E] mb-1">Belum Ada Pengaduan</h2>
-          <p className="text-xs text-[#5F6E6A] mb-4">
+        <div
+          style={{
+            backgroundColor: '#FFFFFF',
+            border: '1px solid #CBD5E1',
+            borderRadius: '16px',
+            padding: '36px 24px',
+            textAlign: 'center',
+            boxShadow: '0 4px 14px rgba(15, 23, 42, 0.05)',
+          }}
+        >
+          <span style={{ fontSize: '36px', display: 'block', marginBottom: '10px' }}>📋</span>
+          <h2 style={{ margin: '0 0 6px', fontSize: '18px', fontWeight: 800, color: '#0F172A' }}>
+            Belum Ada Pengaduan
+          </h2>
+          <p style={{ margin: '0 auto 20px', maxWidth: '360px', fontSize: '14.5px', color: '#475569', lineHeight: 1.5 }}>
             Anda belum pernah mengirim laporan kerusakan fasilitas kampus.
           </p>
           <button
             type="button"
             onClick={onNewReport}
-            className="h-[38px] px-4 bg-[#0F6B5C] text-white text-xs font-semibold rounded-[8px]"
+            style={{
+              padding: '12px 22px',
+              backgroundColor: '#0F6B54',
+              color: '#FFFFFF',
+              fontSize: '15px',
+              fontWeight: 700,
+              border: 'none',
+              borderRadius: '11px',
+              cursor: 'pointer',
+            }}
           >
             Mulai Melapor Sekarang
           </button>
         </div>
       ) : (
-        <div className="space-y-3">
-          {reports.map((rep) => (
-            <div
-              key={rep.report_id}
-              onClick={() => onSelectTicket(rep.ticket_number)}
-              className="bg-white border border-[#DCE1DC] hover:border-[#0F6B5C] rounded-[14px] p-4 shadow-xs hover:shadow transition-all cursor-pointer"
-            >
-              <div className="flex justify-between items-start mb-1.5">
-                <div>
-                  <span className="text-[11px] font-mono font-bold text-[#0F6B5C]">
-                    #{rep.ticket_number}
-                  </span>
-                  <h3 className="text-sm font-bold text-[#14201E]">{rep.nama_fasilitas}</h3>
-                </div>
-                <span
-                  className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full ${
-                    rep.status === 'Selesai'
-                      ? 'bg-[#DDF0E3] text-[#256B43]'
-                      : rep.status === 'Diproses'
-                      ? 'bg-[#FBEACB] text-[#8A5A00]'
-                      : rep.status === 'Dugaan Mendesak'
-                      ? 'bg-[#F9E1DE] text-[#A8261D]'
-                      : 'bg-[#DDEFEA] text-[#0F6B5C]'
-                  }`}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          {reports.map((rep) => {
+            const badgeStyle = getStatusBadgeStyle(rep.status);
+            return (
+              <div
+                key={rep.report_id}
+                onClick={() => onSelectTicket(rep.ticket_number)}
+                style={{
+                  backgroundColor: '#FFFFFF',
+                  border: '1.5px solid #CBD5E1',
+                  borderRadius: '16px',
+                  padding: '18px 20px',
+                  boxShadow: '0 4px 12px rgba(15, 23, 42, 0.04)',
+                  cursor: 'pointer',
+                  transition: 'border-color 0.15s ease',
+                }}
+              >
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'flex-start',
+                    gap: '10px',
+                    marginBottom: '8px',
+                    flexWrap: 'wrap',
+                  }}
                 >
-                  {rep.status}
-                </span>
-              </div>
+                  <div>
+                    <span
+                      style={{
+                        fontSize: '13px',
+                        fontFamily: 'monospace',
+                        fontWeight: 800,
+                        color: '#0F6B54',
+                        display: 'block',
+                        marginBottom: '3px',
+                      }}
+                    >
+                      #{rep.ticket_number}
+                    </span>
+                    <h3 style={{ margin: 0, fontSize: '17px', fontWeight: 800, color: '#0F172A' }}>
+                      {rep.nama_fasilitas}
+                    </h3>
+                  </div>
 
-              <p className="text-xs text-[#5F6E6A] line-clamp-2 mb-2">{rep.deskripsi_kerusakan}</p>
+                  <span
+                    style={{
+                      fontSize: '12.5px',
+                      fontWeight: 800,
+                      padding: '5px 12px',
+                      borderRadius: '999px',
+                      ...badgeStyle,
+                    }}
+                  >
+                    {rep.status}
+                  </span>
+                </div>
 
-              <div className="flex items-center justify-between text-[11px] text-[#8A9692] border-t border-[#F5F6F2] pt-2">
-                <span>📍 {rep.kode_lokasi}</span>
-                <span>
-                  {new Date(rep.created_at).toLocaleDateString('id-ID', {
-                    day: 'numeric',
-                    month: 'short',
-                    year: 'numeric',
-                  })}
-                </span>
+                <p
+                  style={{
+                    margin: '0 0 12px',
+                    fontSize: '14.5px',
+                    color: '#334155',
+                    lineHeight: 1.55,
+                  }}
+                >
+                  {rep.deskripsi_kerusakan}
+                </p>
+
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: '10px',
+                    flexWrap: 'wrap',
+                    fontSize: '13.5px',
+                    fontWeight: 600,
+                    color: '#475569',
+                    borderTop: '1px solid #E2E8F0',
+                    paddingTop: '10px',
+                  }}
+                >
+                  <span>📍 {rep.kode_lokasi}</span>
+                  <span>
+                    {new Date(rep.created_at).toLocaleDateString('id-ID', {
+                      day: 'numeric',
+                      month: 'short',
+                      year: 'numeric',
+                    })}
+                  </span>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
   );
 }
+
+export default MyReports;

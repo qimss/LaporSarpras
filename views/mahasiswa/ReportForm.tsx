@@ -1,301 +1,575 @@
-import { FormEvent, useRef, useState } from 'react';
-import { api } from '../services/api';
-import { Report } from '../types';
+import React, { useState, useRef, useEffect } from 'react';
 
 interface ReportFormProps {
-  onSuccess: (report: Report) => void;
+  onSuccess: (reportData: any) => void;
+  showToast?: (message: string, type?: 'success' | 'error' | 'warning') => void;
 }
 
-export function ReportForm({ onSuccess }: ReportFormProps) {
-  const [urgent, setUrgent] = useState(false);
-  const [location, setLocation] = useState('Gedung F6 L2 R.204');
-  const [facility, setFacility] = useState('Pendingin Ruangan (AC)');
-  const [description, setDescription] = useState('');
-  const [file, setFile] = useState<File | null>(null);
-  const [fileName, setFileName] = useState('');
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [risk, setRisk] = useState('Bahaya listrik');
-  const [duration, setDuration] = useState('< 1 jam');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const inputRef = useRef<HTMLInputElement>(null);
+const DAFTAR_LOKASI_RUANGAN = [
+  'Gedung F6 L1 - F6.101 (Ruang Kuliah)',
+  'Gedung F6 L1 - F6.102 (Ruang Kuliah)',
+  'Gedung F6 L2 - F6.201 (Ruang Kuliah)',
+  'Gedung F6 L2 - F6.204 (Lab Komputer & Multimedia)',
+  'Gedung F6 L3 - F6.301 (Ruang Sidang Teknik)',
+  'Gedung F6 L3 - F6.305 (Studio Gambar Arsitektur)',
+];
 
-  function handleLocationChange(val: string) {
-    // Sanitasi karakter berbahaya (anti-XSS)
-    const sanitized = val.replace(/[<>"'/`]/g, '');
-    if (sanitized.length <= 35) {
-      setLocation(sanitized);
+const DAFTAR_RISIKO_DARURAT = [
+  { id: 'listrik', label: '⚡ Korsleting / Percikan Listrik', skor: 95 },
+  { id: 'kebakaran', label: '🔥 Potensi Kebakaran / Asap Tebal', skor: 100 },
+  { id: 'air', label: '💧 Kebocoran Pipa / Banjir Ruangan', skor: 85 },
+  { id: 'struktur', label: '🧱 Plafon / Kaca / Struktur Hampir Roboh', skor: 90 },
+];
+
+export const ReportForm: React.FC<ReportFormProps> = ({ onSuccess, showToast }) => {
+  const [kodeLokasi, setKodeLokasi] = useState<string>('');
+  const [namaFasilitas, setNamaFasilitas] = useState<string>('');
+  const [deskripsi, setDeskripsi] = useState<string>('');
+  const [foto, setFoto] = useState<File | null>(null);
+  const [fotoPreview, setFotoPreview] = useState<string | null>(null);
+
+  const [isUrgent, setIsUrgent] = useState<boolean>(false);
+  const [selectedRisiko, setSelectedRisiko] = useState<string>('');
+  const [submitting, setSubmitting] = useState<boolean>(false);
+  const [localPopup, setLocalPopup] = useState<{ msg: string; type: 'error' | 'success' } | null>(null);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const urgentSectionRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!localPopup) return;
+    const timer = setTimeout(() => setLocalPopup(null), 5000);
+    return () => clearTimeout(timer);
+  }, [localPopup]);
+
+  useEffect(() => {
+    if (isUrgent && urgentSectionRef.current) {
+      const timer = setTimeout(() => {
+        urgentSectionRef.current?.scrollIntoView({
+          behavior: 'smooth',
+          block: 'end',
+        });
+      }, 90);
+      return () => clearTimeout(timer);
     }
-  }
+  }, [isUrgent]);
 
-  function handleFileChange(selectedFile: File | undefined) {
-    if (!selectedFile) return;
-    if (selectedFile.size > 5 * 1024 * 1024) {
-      alert('Ukuran file melebihi batas 5 MB!');
+  const notify = (msg: string, type: 'error' | 'success' | 'warning' = 'error') => {
+    if (showToast) {
+      showToast(msg, type);
+    } else {
+      setLocalPopup({ msg, type: type === 'warning' ? 'error' : type });
+    }
+  };
+
+  const validateMeaningfulText = (text: string, fieldName: string, minLen: number, minLetters: number): string | null => {
+    const trimmed = text.trim();
+    if (!trimmed) return `${fieldName} wajib diisi.`;
+    if (trimmed.length < minLen) return `${fieldName} minimal ${minLen} karakter.`;
+
+    if (/^[0-9\s.,-]+$/.test(trimmed)) {
+      return `${fieldName} tidak boleh hanya angka.`;
+    }
+    if (/^[^a-zA-Z0-9]+$/.test(trimmed)) {
+      return `${fieldName} tidak boleh hanya simbol.`;
+    }
+
+    const letterCount = (trimmed.match(/[a-zA-Z\u00C0-\u024F]/g) || []).length;
+    if (letterCount < minLetters) {
+      return `${fieldName} minimal harus mengandung ${minLetters} huruf yang jelas.`;
+    }
+    if (/(.)\1{4,}/i.test(trimmed)) {
+      return `${fieldName} mengandung pengulangan karakter tidak wajar.`;
+    }
+    return null;
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) {
+      notify('Format foto harus JPG, PNG, atau WEBP.', 'error');
       return;
     }
-    setFile(selectedFile);
-    setFileName(selectedFile.name);
-    setPreviewUrl(URL.createObjectURL(selectedFile));
-  }
-
-  async function handleSubmit(event: FormEvent) {
-    event.preventDefault();
-    setError('');
-
-    if (!location.trim()) {
-      setError('Lokasi ruangan / titik fasilitas wajib diisi.');
+    if (file.size > 5 * 1024 * 1024) {
+      notify('Ukuran foto maksimal 5 MB.', 'error');
       return;
     }
 
-    if (!description.trim() && !urgent) {
-      setError('Deskripsi kerusakan fasilitas wajib diisi.');
+    setFoto(file);
+    setFotoPreview(URL.createObjectURL(file));
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLocalPopup(null);
+
+    if (!kodeLokasi) {
+      notify('Silakan pilih Lokasi Ruangan terlebih dahulu.', 'error');
       return;
     }
 
-    if (urgent && !file) {
-      setError('Foto bukti fisik wajib diunggah untuk pelaporan kondisi darurat.');
+    const fasilitasErr = validateMeaningfulText(namaFasilitas, 'Jenis Fasilitas', 2, 2);
+    if (fasilitasErr) {
+      notify(fasilitasErr, 'error');
       return;
     }
 
-    setLoading(true);
+    const deskripsiErr = validateMeaningfulText(deskripsi, 'Deskripsi Kerusakan', 10, 8);
+    if (deskripsiErr) {
+      notify(deskripsiErr, 'error');
+      return;
+    }
+
+    if (isUrgent && !foto) {
+      notify('Foto bukti fisik wajib dilampirkan untuk Kondisi Mendesak.', 'error');
+      return;
+    }
+
+    if (isUrgent && !selectedRisiko) {
+      notify('Pilih salah satu Jenis Risiko Bahaya untuk Kondisi Mendesak.', 'error');
+      return;
+    }
+
+    setSubmitting(true);
     try {
       const formData = new FormData();
-      formData.append('kode_lokasi', location.trim());
-      formData.append('nama_fasilitas', facility);
-      formData.append('deskripsi_kerusakan', description.trim() || `[Laporan Mendesak: ${risk}] Durasi: ${duration}`);
-      formData.append('is_urgent_claimed', String(urgent));
-      if (urgent) {
-        formData.append('jenis_bahaya', risk);
-        formData.append('durasi_masalah', duration);
-      }
-      if (file) {
-        formData.append('foto', file);
+      formData.append('kode_lokasi', kodeLokasi);
+      formData.append('nama_fasilitas', namaFasilitas.trim());
+      formData.append('deskripsi_kerusakan', deskripsi.trim());
+      if (foto) {
+        formData.append('foto_bukti', foto);
       }
 
-      const res = await api.createReport(formData);
-      if (res.success && res.report) {
-        onSuccess(res.report);
-      } else {
-        setError(res.message || 'Gagal mengirim laporan. Silakan coba kembali.');
+      if (isUrgent) {
+        const risikoObj = DAFTAR_RISIKO_DARURAT.find((r) => r.id === selectedRisiko);
+        const labelBahaya = risikoObj ? risikoObj.label : 'Kondisi Mendesak';
+        formData.append('is_urgent', 'on');
+        formData.append('is_urgent_claimed', 'true');
+        formData.append('jenis_bahaya', labelBahaya);
+        formData.append('durasi_masalah', labelBahaya);
+        formData.append('skor_risiko', String(risikoObj ? risikoObj.skor : 90));
       }
-    } catch (err: any) {
-      setError(err.message || 'Terjadi kesalahan koneksi ke server.');
+
+      const response = await fetch('/api/reports', {
+        method: 'POST',
+        body: formData,
+        credentials: 'include',
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        notify(result.message || 'Gagal mengirim laporan.', 'error');
+        return;
+      }
+
+      notify('Laporan berhasil dikirim!', 'success');
+      setTimeout(() => {
+        onSuccess(result.report);
+      }, 500);
+    } catch {
+      notify('Gagal terhubung ke server.', 'error');
     } finally {
-      setLoading(false);
+      setSubmitting(false);
     }
-  }
+  };
 
   return (
-    <div className="report-content max-w-xl mx-auto py-4">
-      {/* Universal QR Info Banner */}
-      <div className="bg-[#EDF7F4] border border-[#DDEFEA] rounded-[14px] p-3.5 mb-5 flex items-center justify-between shadow-xs">
-        <div className="flex items-center gap-2.5">
-          <span className="text-xl">📱</span>
-          <div>
-            <div className="text-[11px] font-bold text-[#0F6B5C] uppercase tracking-wider">Universal QR Code</div>
-            <div className="text-xs font-semibold text-[#14201E]">Portal Pelaporan Fasilitas Kampus Terpadu</div>
-          </div>
-        </div>
-        <span className="text-[11px] font-medium bg-white px-2 py-0.5 rounded-full border border-[#DDEFEA] text-[#0F6B5C]">
-          1 QR Semua Ruangan
-        </span>
-      </div>
-
-      <form onSubmit={handleSubmit} className="space-y-4">
-        {/* Input Lokasi dengan batasan 35 huruf dan security anti-XSS */}
-        <label className="field block">
-          <div className="flex justify-between items-center mb-1">
-            <span className="text-xs font-semibold text-[#2B3B38]">Lokasi Ruangan / Titik Fasilitas</span>
-            <small className={`font-mono text-xs ${location.length >= 35 ? 'text-amber-600 font-bold' : 'text-[#8A9692]'}`}>
-              {location.length}/35 huruf
-            </small>
-          </div>
-          <div className="input-count relative">
-            <input
-              value={location}
-              maxLength={35}
-              onChange={(e) => handleLocationChange(e.target.value)}
-              placeholder="Contoh: Gedung F6 L2 R.204"
-              className="w-full h-[42px] px-3.5 bg-white border border-[#DCE1DC] rounded-[10px] text-sm text-[#14201E] placeholder-[#8A9692] focus:outline-none focus:border-[#0F6B5C] focus:ring-1 focus:ring-[#0F6B5C]"
-            />
-          </div>
-          <small className="text-[#8A9692] text-[11px] mt-1 block">
-            Maksimal 35 karakter. Karakter tag berbahaya dibersihkan secara otomatis (anti-XSS).
-          </small>
-        </label>
-
-        {/* Jenis Fasilitas */}
-        <label className="field block">
-          <span className="text-xs font-semibold text-[#2B3B38] mb-1 block">Jenis Fasilitas</span>
-          <select
-            value={facility}
-            onChange={(e) => setFacility(e.target.value)}
-            className="w-full h-[42px] px-3 bg-white border border-[#DCE1DC] rounded-[10px] text-sm text-[#14201E] focus:outline-none focus:border-[#0F6B5C]"
-          >
-            <option>Pendingin Ruangan (AC)</option>
-            <option>Kelistrikan / Stopkontak</option>
-            <option>Kursi Mahasiswa / Meja Kuliah</option>
-            <option>Toilet / Sanitasi</option>
-            <option>Proyektor / LCD</option>
-            <option>Pintu / Jendela / Plafon</option>
-            <option>Fasilitas Lainnya</option>
-          </select>
-        </label>
-
-        {/* Mode Mendesak Triage */}
-        {urgent ? (
-          <section className="urgent-panel bg-[#F9E1DE] border border-[#A8261D]/30 rounded-[14px] p-4 space-y-3">
-            <button
-              type="button"
-              className="urgent-title flex items-center gap-2 text-[#A8261D] font-bold text-sm w-full text-left"
-              onClick={() => setUrgent(false)}
-            >
-              <span className="checked-box bg-[#A8261D] text-white w-5 h-5 rounded flex items-center justify-center text-xs">✓</span>
-              <span>⚠️ Mode Kondisi Mendesak / Berbahaya Aktif (Klik untuk matikan)</span>
-            </button>
-
-            <div>
-              <strong className="field-label text-xs text-[#2B3B38] block mb-1.5">Jenis risiko (pilih yang sesuai):</strong>
-              <div className="chips flex gap-2">
-                {['Bahaya listrik', 'Banjir air', 'Risiko fisik'].map((item) => (
-                  <button
-                    type="button"
-                    key={item}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
-                      risk === item ? 'bg-[#A8261D] text-white border-[#A8261D]' : 'bg-white text-[#2B3B38] border-[#DCE1DC]'
-                    }`}
-                    onClick={() => setRisk(item)}
-                  >
-                    {item}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <label className="field block">
-              <span className="text-xs font-semibold text-[#2B3B38] mb-1 block">Sudah berlangsung berapa lama?</span>
-              <select
-                value={duration}
-                onChange={(e) => setDuration(e.target.value)}
-                className="w-full h-[38px] px-3 bg-white border border-[#DCE1DC] rounded-[8px] text-xs text-[#14201E]"
-              >
-                <option value="< 1 jam">Baru saja terjadi (&lt; 1 jam)</option>
-                <option value="1-24 jam">1 s.d. 24 jam</option>
-                <option value="> 1 hari">Lebih dari 1 hari</option>
-              </select>
-            </label>
-
-            <p className="urgent-note text-xs text-[#A8261D] font-medium">
-              🚨 Laporan bahaya yang terverifikasi ditangani tim tanggap darurat dengan SLA respons 1–2 jam.
-            </p>
-          </section>
-        ) : (
-          <label className="field block">
-            <span className="text-xs font-semibold text-[#2B3B38] mb-1 block">Deskripsi Kerusakan</span>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Contoh: AC meneteskan air ke meja mahasiswa dan hembusan angin tidak dingin sejak kuliah pagi..."
-              className="w-full h-[90px] p-3 bg-white border border-[#DCE1DC] rounded-[10px] text-sm text-[#14201E] placeholder-[#8A9692] focus:outline-none focus:border-[#0F6B5C]"
-            />
-          </label>
-        )}
-
-        {/* Unggah Foto Bukti */}
-        <div className="field block">
-          <span className="text-xs font-semibold text-[#2B3B38] mb-1 block">
-            Foto Bukti Fisik {urgent ? <span className="text-red-600 font-bold">(Wajib)</span> : <span className="text-gray-400 font-normal">(Opsional, maks 5 MB)</span>}
+    <div style={{ width: '100%', maxWidth: '640px', margin: '0 auto', padding: '18px 16px 40px' }}>
+      {localPopup && (
+        <div
+          role="alert"
+          style={{
+            position: 'fixed',
+            top: '20px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 99999,
+            width: 'max-content',
+            minWidth: '300px',
+            maxWidth: 'calc(100vw - 32px)',
+            padding: '15px 22px',
+            borderRadius: '14px',
+            backgroundColor: localPopup.type === 'error' ? '#DC2626' : '#0F6B54',
+            color: '#FFFFFF',
+            border: localPopup.type === 'error' ? '2px solid #991B1B' : '2px solid #064E3B',
+            boxShadow: '0 18px 38px -8px rgba(15, 23, 42, 0.45)',
+            fontSize: '15px',
+            fontWeight: 700,
+            lineHeight: 1.45,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '14px',
+          }}
+        >
+          <span>
+            {localPopup.type === 'error' ? '⚠️' : '✅'} {localPopup.msg}
           </span>
-          <input
-            ref={inputRef}
-            className="file-input hidden"
-            type="file"
-            accept=".jpg,.jpeg,.png,.webp"
-            onChange={(e) => handleFileChange(e.target.files?.[0])}
-          />
           <button
             type="button"
-            className={`dropzone w-full py-4 border-2 border-dashed rounded-[12px] flex flex-col items-center justify-center transition-colors ${
-              urgent ? 'border-[#A8261D] bg-red-50/40' : 'border-[#DCE1DC] hover:border-[#0F6B5C] bg-white'
-            }`}
-            onClick={() => inputRef.current?.click()}
-          >
-            <span className="text-2xl mb-1">📸</span>
-            <strong className="text-xs text-[#2B3B38]">
-              {urgent && !fileName ? 'Foto bukti fisik wajib diunggah untuk triage darurat' : 'Pilih foto atau ambil gambar dari kamera'}
-            </strong>
-            <small className="text-[11px] text-[#8A9692]">Format JPG, PNG, WEBP • Maks 5 MB</small>
-          </button>
-
-          {fileName && (
-            <div className="file-card mt-2 p-2.5 bg-white border border-[#DCE1DC] rounded-[10px] flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                {previewUrl ? (
-                  <img src={previewUrl} alt="Preview" className="w-10 h-10 object-cover rounded-md border" />
-                ) : (
-                  <span className="w-10 h-10 bg-gray-100 rounded-md flex items-center justify-center text-xs">🖼️</span>
-                )}
-                <div>
-                  <strong className="text-xs text-[#14201E] block truncate max-w-[200px]">{fileName}</strong>
-                  <small className="text-[10px] text-[#8A9692]">Siap diunggah</small>
-                </div>
-              </div>
-              <button
-                type="button"
-                className="text-xs text-red-600 font-medium px-2 py-1 rounded hover:bg-red-50"
-                onClick={() => {
-                  setFile(null);
-                  setFileName('');
-                  setPreviewUrl(null);
-                }}
-              >
-                Hapus
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* Toggle Mode Mendesak jika belum aktif */}
-        {!urgent && (
-          <button
-            type="button"
-            className="urgent-toggle w-full p-3 border border-red-200 bg-red-50/50 hover:bg-red-50 rounded-[12px] flex items-center gap-2.5 text-left transition-colors"
-            onClick={() => {
-              setUrgent(true);
+            onClick={() => setLocalPopup(null)}
+            style={{
+              background: 'rgba(255,255,255,0.2)',
+              border: 'none',
+              color: '#FFFFFF',
+              borderRadius: '8px',
+              padding: '4px 9px',
+              fontSize: '13px',
+              fontWeight: 800,
+              cursor: 'pointer',
             }}
           >
-            <span className="empty-box w-4 h-4 border-2 border-red-500 rounded flex-shrink-0" />
-            <strong className="text-xs text-red-700">
-              ⚠️ Tandai sebagai Kondisi Mendesak / Berbahaya (SLA Cepat 1–2 Jam)
-            </strong>
+            ✕
           </button>
-        )}
+        </div>
+      )}
 
-        {error && (
-          <div className="p-3 rounded-[10px] bg-red-50 border border-red-200 text-xs text-red-700">
-            {error}
+      <form
+        onSubmit={handleSubmit}
+        noValidate
+        style={{
+          backgroundColor: '#FFFFFF',
+          border: '1px solid #CBD5E1',
+          borderRadius: '18px',
+          padding: '24px',
+          boxShadow: '0 6px 24px -4px rgba(15, 23, 42, 0.07)',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '18px',
+        }}
+      >
+        <div>
+          <label
+            htmlFor="kode_lokasi"
+            style={{
+              display: 'block',
+              fontSize: '15px',
+              fontWeight: 700,
+              color: '#0F172A',
+              marginBottom: '8px',
+            }}
+          >
+            Lokasi Ruangan / Titik Fasilitas <b style={{ color: '#DC2626' }}>*</b>
+          </label>
+          <select
+            id="kode_lokasi"
+            value={kodeLokasi}
+            onChange={(e) => setKodeLokasi(e.target.value)}
+            style={{
+              width: '100%',
+              padding: '12px 14px',
+              fontSize: '15px',
+              fontWeight: 500,
+              color: kodeLokasi ? '#0F172A' : '#475569',
+              backgroundColor: '#FFFFFF',
+              border: '1.5px solid #94A3B8',
+              borderRadius: '11px',
+              outline: 'none',
+              cursor: 'pointer',
+              boxSizing: 'border-box',
+            }}
+          >
+            <option value="">-- Pilih Lokasi Ruangan --</option>
+            {DAFTAR_LOKASI_RUANGAN.map((ruang) => (
+              <option key={ruang} value={ruang}>
+                {ruang}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: '8px',
+            }}
+          >
+            <label
+              htmlFor="nama_fasilitas"
+              style={{ fontSize: '15px', fontWeight: 700, color: '#0F172A', marginBottom: 0 }}
+            >
+              Jenis Fasilitas <b style={{ color: '#DC2626' }}>*</b>
+            </label>
+            <span style={{ fontSize: '13px', fontWeight: 600, color: '#475569' }}>
+              {namaFasilitas.length}/40 karakter
+            </span>
           </div>
-        )}
+          <input
+            id="nama_fasilitas"
+            type="text"
+            autoComplete="off"
+            maxLength={40}
+            value={namaFasilitas}
+            onChange={(e) => setNamaFasilitas(e.target.value)}
+            placeholder="Ketik jenis fasilitas (contoh: AC, Proyektor, Kursi, Stop Kontak)"
+            style={{
+              width: '100%',
+              padding: '12px 14px',
+              fontSize: '15px',
+              color: '#0F172A',
+              backgroundColor: '#FFFFFF',
+              border: '1.5px solid #94A3B8',
+              borderRadius: '11px',
+              outline: 'none',
+              boxSizing: 'border-box',
+            }}
+          />
+        </div>
 
-        {/* Tombol Kirim */}
-        <button
-          type="submit"
-          disabled={loading}
-          className={`primary-button w-full h-[48px] rounded-[10px] font-semibold text-sm text-white shadow-sm flex items-center justify-center gap-2 transition-all ${
-            urgent ? 'bg-[#A8261D] hover:bg-[#8e1f18]' : 'bg-[#0F6B5C] hover:bg-[#0c574a]'
-          } ${loading ? 'opacity-70 cursor-not-allowed' : ''}`}
+        <div>
+          <label
+            htmlFor="deskripsi_kerusakan"
+            style={{
+              display: 'block',
+              fontSize: '15px',
+              fontWeight: 700,
+              color: '#0F172A',
+              marginBottom: '8px',
+            }}
+          >
+            Deskripsi Kerusakan <b style={{ color: '#DC2626' }}>*</b>
+          </label>
+          <textarea
+            id="deskripsi_kerusakan"
+            rows={4}
+            value={deskripsi}
+            onChange={(e) => setDeskripsi(e.target.value)}
+            placeholder="Contoh: AC meneteskan air ke meja mahasiswa dan hembusan angin tidak dingin sejak kuliah pagi..."
+            style={{
+              width: '100%',
+              padding: '12px 14px',
+              fontSize: '15px',
+              lineHeight: 1.55,
+              color: '#0F172A',
+              backgroundColor: '#FFFFFF',
+              border: '1.5px solid #94A3B8',
+              borderRadius: '11px',
+              resize: 'vertical',
+              outline: 'none',
+              boxSizing: 'border-box',
+            }}
+          />
+          <p style={{ margin: '6px 0 0', fontSize: '13px', color: '#475569', lineHeight: 1.45 }}>
+            Jelaskan kerusakan secara spesifik (minimal 10 huruf, tidak boleh hanya angka atau simbol).
+          </p>
+        </div>
+
+        <div>
+          <div
+            style={{
+              fontSize: '15px',
+              fontWeight: 700,
+              color: '#0F172A',
+              marginBottom: '8px',
+            }}
+          >
+            Foto Bukti Fisik{' '}
+            {isUrgent ? (
+              <b style={{ color: '#DC2626', fontSize: '13.5px' }}>
+                * (Wajib untuk Kondisi Mendesak)
+              </b>
+            ) : (
+              <span style={{ fontSize: '13.5px', fontWeight: 500, color: '#475569' }}>
+                (Opsional, maks 5 MB)
+              </span>
+            )}
+          </div>
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            onChange={handleFileChange}
+            style={{ display: 'none' }}
+          />
+
+          <div
+            onClick={() => fileInputRef.current?.click()}
+            style={{
+              border: isUrgent ? '2px dashed #DC2626' : '2px dashed #0F6B54',
+              backgroundColor: isUrgent ? '#FEF2F2' : '#F0FDF4',
+              borderRadius: '13px',
+              padding: '18px',
+              textAlign: 'center',
+              cursor: 'pointer',
+            }}
+          >
+            {fotoPreview ? (
+              <div>
+                <img
+                  src={fotoPreview}
+                  alt="Pratinjau bukti"
+                  style={{
+                    maxHeight: '160px',
+                    borderRadius: '10px',
+                    objectFit: 'cover',
+                    marginBottom: '8px',
+                  }}
+                />
+                <div
+                  style={{
+                    fontSize: '13.5px',
+                    fontWeight: 700,
+                    color: isUrgent ? '#B91C1C' : '#065F46',
+                  }}
+                >
+                  {foto?.name} (Klik untuk ganti foto)
+                </div>
+              </div>
+            ) : (
+              <div>
+                <div style={{ fontSize: '26px', marginBottom: '4px' }}>📷</div>
+                <div
+                  style={{
+                    fontSize: '14.5px',
+                    fontWeight: 700,
+                    color: isUrgent ? '#B91C1C' : '#065F46',
+                  }}
+                >
+                  {isUrgent
+                    ? 'Wajib unggah foto bukti kondisi mendesak / berbahaya'
+                    : 'Pilih foto atau ambil gambar dari kamera'}
+                </div>
+                <div style={{ fontSize: '12.5px', color: '#475569', marginTop: '3px' }}>
+                  Format JPG, PNG, WEBP • Maks 5 MB
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div
+          ref={urgentSectionRef}
+          style={{
+            scrollMarginBottom: '28px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '16px',
+          }}
         >
-          {loading ? (
-            <span>Mengirim Laporan…</span>
-          ) : (
-            <>
-              <span>{urgent ? 'Kirim Laporan Mendesak' : 'Kirim Laporan Kerusakan'}</span>
-              <span>→</span>
-            </>
-          )}
-        </button>
+          {/* Panel Kondisi Mendesak Simpel */}
+          <div
+            style={{
+              border: isUrgent ? '2px solid #DC2626' : '1.5px solid #FCA5A5',
+              backgroundColor: '#FEF2F2',
+              borderRadius: '14px',
+              padding: '16px',
+            }}
+          >
+            <label
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+                cursor: 'pointer',
+                fontSize: '14.5px',
+                fontWeight: 700,
+                color: '#B91C1C',
+                marginBottom: 0,
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={isUrgent}
+                onChange={(e) => {
+                  const checked = e.target.checked;
+                  setIsUrgent(checked);
+                  if (!checked) setSelectedRisiko('');
+                }}
+                style={{
+                  width: '20px',
+                  height: '20px',
+                  accentColor: '#DC2626',
+                  cursor: 'pointer',
+                  flexShrink: 0,
+                }}
+              />
+              <span>⚠️ Tandai sebagai Kondisi Mendesak / Berbahaya (SLA Cepat 1–2 Jam)</span>
+            </label>
+
+            {isUrgent && (
+              <div
+                style={{
+                  marginTop: '14px',
+                  paddingTop: '14px',
+                  borderTop: '1px solid #FECACA',
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: '14px',
+                    fontWeight: 700,
+                    color: '#7F1D1D',
+                    marginBottom: '10px',
+                  }}
+                >
+                  Pilih Jenis Risiko Bahaya <b style={{ color: '#DC2626' }}>*</b>:
+                </div>
+
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                    gap: '10px',
+                  }}
+                >
+                  {DAFTAR_RISIKO_DARURAT.map((item) => {
+                    const aktif = selectedRisiko === item.id;
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => setSelectedRisiko(item.id)}
+                        style={{
+                          padding: '12px 14px',
+                          borderRadius: '11px',
+                          border: aktif ? '2px solid #991B1B' : '1.5px solid #FCA5A5',
+                          backgroundColor: aktif ? '#DC2626' : '#FFFFFF',
+                          color: aktif ? '#FFFFFF' : '#7F1D1D',
+                          fontSize: '13.5px',
+                          fontWeight: 700,
+                          textAlign: 'left',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {item.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <button
+            type="submit"
+            disabled={submitting}
+            style={{
+              width: '100%',
+              padding: '15px 20px',
+              borderRadius: '12px',
+              border: 'none',
+              backgroundColor: submitting ? '#64748B' : '#0F6B54',
+              color: '#FFFFFF',
+              fontSize: '16px',
+              fontWeight: 700,
+              cursor: submitting ? 'not-allowed' : 'pointer',
+              boxShadow: '0 4px 14px rgba(15, 107, 84, 0.25)',
+            }}
+          >
+            {submitting ? 'Mengirim Laporan...' : 'Kirim Laporan Kerusakan →'}
+          </button>
+        </div>
       </form>
     </div>
   );
-}
+};
+
+export default ReportForm;

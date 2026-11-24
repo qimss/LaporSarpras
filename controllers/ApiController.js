@@ -2,6 +2,40 @@ import { User, Report, EmergencyVerification, AIAnalysisResult, ReportStatusLog 
 import aiService from '../services/aiService.js';
 import { Op } from 'sequelize';
 
+function validateMeaningfulText(text, minLetters = 2) {
+  if (!text || typeof text !== 'string') {
+    return { valid: false, message: 'Wajib diisi.' };
+  }
+
+  const trimmed = text.trim();
+  const lettersOnly = trimmed.replace(/[^a-zA-Z\u00C0-\u024F]/g, '');
+
+  if (lettersOnly.length < minLetters) {
+    return {
+      valid: false,
+      message: `Minimal harus mengandung ${minLetters} huruf yang jelas (tidak boleh hanya angka atau simbol).`,
+    };
+  }
+
+  if (/(.)\1{4,}/.test(trimmed)) {
+    return {
+      valid: false,
+      message: 'Input terdeteksi tidak valid (pengulangan karakter berlebihan).',
+    };
+  }
+
+  return { valid: true };
+}
+
+function normalizePriorityForDb(val, fallback = 'Sedang') {
+  const clean = String(val || fallback).trim().toLowerCase();
+  if (['rendah', 'low'].includes(clean)) return 'Rendah';
+  if (['tinggi', 'high', 'kritis', 'critical', 'darurat', 'emergency', 'urgent'].includes(clean)) {
+    return 'Tinggi';
+  }
+  return 'Sedang';
+}
+
 export class ApiController {
   // ==========================================
   // 1. AUTENTIKASI (Role-Based Login: NIM atau Email)
@@ -15,7 +49,6 @@ export class ApiController {
         return res.status(400).json({ success: false, message: 'NIM atau Email dan kata sandi wajib diisi.' });
       }
 
-      // Mendukung login fleksibel: mencari kecocokan berdasarkan NIM ATAU Alamat Email
       const user = await User.findOne({
         where: {
           [Op.or]: [
@@ -29,7 +62,12 @@ export class ApiController {
         return res.status(401).json({ success: false, message: 'NIM atau Email tidak terdaftar dalam sistem.' });
       }
 
-      if (user.password_hash !== password && password !== 'password123' && password !== 'admin123' && password !== 'mahasiswa123') {
+      if (
+        user.password_hash !== password &&
+        password !== 'password123' &&
+        password !== 'admin123' &&
+        password !== 'mahasiswa123'
+      ) {
         return res.status(401).json({ success: false, message: 'Kata sandi salah.' });
       }
 
@@ -76,31 +114,73 @@ export class ApiController {
   // ==========================================
   static async createReport(req, res) {
     try {
+      // Ambil file baik dari req.file maupun req.files (untuk uploadPhoto.any())
+      const uploadedFile =
+        req.file ||
+        (Array.isArray(req.files) && req.files.length > 0 ? req.files[0] : null);
+
       const {
         kode_lokasi,
         nama_fasilitas,
         deskripsi_kerusakan,
+        is_urgent,
         is_urgent_claimed,
         jenis_bahaya,
         durasi_masalah,
+        skor_risiko,
       } = req.body;
 
-      // Validasi batas 35 karakter lokasi & sanitasi anti-XSS
+      // Sanitasi anti-XSS pada lokasi
       let lokasiSanitized = (kode_lokasi || '').replace(/[<>"'/`]/g, '').trim();
-      if (lokasiSanitized.length > 35) {
-        lokasiSanitized = lokasiSanitized.substring(0, 35);
+      if (lokasiSanitized.length > 60) {
+        lokasiSanitized = lokasiSanitized.substring(0, 60);
       }
 
       if (!lokasiSanitized) {
-        return res.status(400).json({ success: false, message: 'Lokasi ruangan/titik fasilitas wajib diisi.' });
+        return res.status(400).json({ success: false, message: 'Lokasi ruangan/titik fasilitas wajib dipilih.' });
       }
 
-      if (!nama_fasilitas || !deskripsi_kerusakan) {
-        return res.status(400).json({ success: false, message: 'Fasilitas dan deskripsi kerusakan wajib diisi.' });
+      // Sanitasi & validasi kebenaran teks nama_fasilitas (minimal 2 huruf bermakna)
+      const fasilitasSanitized = (nama_fasilitas || '').replace(/[<>"'/`]/g, '').trim();
+      const validFasilitas = validateMeaningfulText(fasilitasSanitized, 2);
+      if (!validFasilitas.valid) {
+        return res.status(400).json({
+          success: false,
+          message: `Jenis Fasilitas tidak valid: ${validFasilitas.message}`,
+        });
       }
 
-      // Foto Bukti
-      const fotoUrl = req.file ? `/uploads/${req.file.filename}` : '/uploads/default_damaged.jpg';
+      // Sanitasi & validasi kebenaran teks deskripsi_kerusakan (minimal 10 huruf bermakna)
+      const deskripsiSanitized = (deskripsi_kerusakan || '').replace(/[<>"'/`]/g, '').trim();
+      const validDeskripsi = validateMeaningfulText(deskripsiSanitized, 10);
+      if (!validDeskripsi.valid) {
+        return res.status(400).json({
+          success: false,
+          message: `Deskripsi Kerusakan tidak valid: ${validDeskripsi.message}`,
+        });
+      }
+
+      const rawUrgent = is_urgent_claimed ?? is_urgent;
+      const isUrgent =
+        rawUrgent === 'true' || rawUrgent === true || rawUrgent === 'on' || rawUrgent === '1';
+
+      const jenisBahayaValue = (jenis_bahaya || durasi_masalah || '').trim();
+
+      if (isUrgent && !jenisBahayaValue) {
+        return res.status(400).json({
+          success: false,
+          message: 'Jenis risiko bahaya wajib dipilih saat mode Kondisi Mendesak diaktifkan.',
+        });
+      }
+
+      if (isUrgent && !uploadedFile) {
+        return res.status(400).json({
+          success: false,
+          message: 'Bukti foto fisik wajib dilampirkan untuk laporan Kondisi Mendesak / Berbahaya.',
+        });
+      }
+
+      const fotoUrl = uploadedFile ? `/uploads/${uploadedFile.filename}` : '/uploads/default_damaged.jpg';
 
       // Generate Ticket Number: TKT-YYYYMMDD-XXXX
       const today = new Date();
@@ -108,10 +188,8 @@ export class ApiController {
       const countToday = await Report.count();
       const ticketNumber = `TKT-${datePart}-${String(countToday + 1).padStart(4, '0')}`;
 
-      const isUrgent = is_urgent_claimed === 'true' || is_urgent_claimed === true || is_urgent_claimed === 'on';
       const initialStatus = isUrgent ? 'Dugaan Mendesak' : 'Menunggu Analisis AI';
 
-      // Default user mahasiswa jika belum login
       let userId = req.session?.user?.user_id;
       if (!userId) {
         const defaultStudent = await User.findOne({ where: { role: 'mahasiswa' } });
@@ -122,38 +200,86 @@ export class ApiController {
         ticket_number: ticketNumber,
         user_id: userId,
         kode_lokasi: lokasiSanitized,
-        nama_fasilitas: nama_fasilitas.trim(),
-        deskripsi_kerusakan: deskripsi_kerusakan.trim(),
+        nama_fasilitas: fasilitasSanitized,
+        deskripsi_kerusakan: deskripsiSanitized,
         foto_url: fotoUrl,
         is_urgent_claimed: isUrgent,
         status: initialStatus,
       });
 
-      // Simpan verifikasi darurat jika ditandai mendesak
       if (isUrgent) {
         await EmergencyVerification.create({
           report_id: report.report_id,
-          jenis_bahaya: jenis_bahaya || 'Bahaya fisik/umum',
-          durasi_masalah: durasi_masalah || '< 1 jam',
+          jenis_bahaya: jenisBahayaValue,
+          durasi_masalah: durasi_masalah || jenisBahayaValue || '< 1 jam',
           status_verifikasi: 'Pending',
         });
       }
 
-      // Catat log status awal
       await ReportStatusLog.create({
         report_id: report.report_id,
         status_sebelum: 'Dibuat',
         status_sesudah: initialStatus,
         catatan_petugas: isUrgent
-          ? 'Laporan dibuat dengan klaim darurat (SLA 1-2 Jam). Menunggu verifikasi tim Sarpras.'
+          ? `Laporan dibuat dengan klaim darurat (${jenisBahayaValue}${skor_risiko ? ` - Skor ${skor_risiko}` : ''} - SLA 1-2 Jam). Menunggu verifikasi tim Sarpras.`
           : 'Laporan berhasil terkirim ke dalam antrean sistem LaporSarpras AI.',
         updated_by_user_id: userId,
       });
 
+      // ========================================================
+      // FIKSASI ANALISIS AI SEGERA SAAT LAPORAN DIBUAT (INSTANT AI)
+      // ========================================================
+      let aiAnalysisRecord = null;
+      try {
+        const aiResult = await aiService.analyzeReportPriority(
+          lokasiSanitized,
+          fasilitasSanitized,
+          deskripsiSanitized
+        );
+
+        const assignedPriority = isUrgent
+          ? 'Tinggi'
+          : normalizePriorityForDb(aiResult?.prioritas, 'Sedang');
+        const assignedConfidence = isUrgent ? 0.98 : Number(aiResult?.skor_keyakinan ?? 0.88);
+        const rawKeywords = aiResult?.kata_kunci_utama ?? fasilitasSanitized;
+        const assignedKeywords = Array.isArray(rawKeywords)
+          ? rawKeywords.join(', ')
+          : String(rawKeywords).trim() || fasilitasSanitized;
+        const assignedAlasan = isUrgent
+          ? `Laporan ditandai mahasiswa sebagai Kondisi Mendesak (${jenisBahayaValue}). ${aiResult?.alasan_ringkas || ''}`.trim()
+          : String(aiResult?.alasan_ringkas || 'Laporan kerusakan fasilitas memerlukan peninjauan teknis.').trim();
+        const assignedTindakan = isUrgent
+          ? 'Segera tugaskan teknisi tanggap darurat (SLA 1-2 Jam) ke lokasi.'
+          : String(aiResult?.rekomendasi_tindakan || 'Jadwalkan inspeksi petugas sarana dan prasarana ke lokasi terkait.').trim();
+
+        aiAnalysisRecord = await AIAnalysisResult.create({
+          report_id: report.report_id,
+          rekomendasi_prioritas: assignedPriority,
+          skor_keyakinan: assignedConfidence,
+          kata_kunci_utama: assignedKeywords,
+          alasan_ringkas: assignedAlasan,
+          rekomendasi_tindakan: assignedTindakan,
+          jumlah_laporan_serupa: 1,
+        });
+
+        await ReportStatusLog.create({
+          report_id: report.report_id,
+          status_sebelum: initialStatus,
+          status_sesudah: initialStatus,
+          catatan_petugas: `Analisis AI (${aiResult?.source || 'AI Engine'}): Prioritas '${assignedPriority}' (Keyakinan: ${Math.round(assignedConfidence * 100)}%). Saran: ${assignedTindakan}`,
+          updated_by_user_id: null,
+        });
+      } catch (aiErr) {
+        console.warn('⚠️ Analisis AI otomatis saat pembuatan laporan terkendala:', aiErr.message);
+      }
+
       return res.status(201).json({
         success: true,
-        message: 'Laporan berhasil dibuat.',
-        report,
+        message: 'Laporan berhasil dibuat dan dianalisis AI.',
+        report: {
+          ...report.toJSON(),
+          aiAnalysis: aiAnalysisRecord,
+        },
       });
     } catch (error) {
       console.error('API createReport Error:', error);
@@ -254,7 +380,11 @@ export class ApiController {
         where: { parent_report_id: null },
         include: [
           { model: AIAnalysisResult, as: 'aiAnalysis', required: true },
-          { model: Report, as: 'similarReports', include: [{ model: User, as: 'reporter', attributes: ['nama_lengkap', 'nim'] }] },
+          {
+            model: Report,
+            as: 'similarReports',
+            include: [{ model: User, as: 'reporter', attributes: ['nama_lengkap', 'nim'] }],
+          },
           { model: User, as: 'reporter', attributes: ['nama_lengkap', 'nim'] },
         ],
         order: [['created_at', 'DESC']],
@@ -295,7 +425,7 @@ export class ApiController {
       }
 
       const { reportId } = req.params;
-      const { action, catatan } = req.body; // action: 'verify' | 'downgrade'
+      const { action, catatan } = req.body;
 
       const report = await Report.findByPk(reportId, {
         include: [{ model: EmergencyVerification, as: 'emergencyVerification' }],
@@ -332,7 +462,10 @@ export class ApiController {
         updated_by_user_id: req.session.user.user_id,
       });
 
-      return res.json({ success: true, message: `Laporan berhasil di-${action === 'verify' ? 'verifikasi' : 'turunkan'}.` });
+      return res.json({
+        success: true,
+        message: `Laporan berhasil di-${action === 'verify' ? 'verifikasi' : 'turunkan'}.`,
+      });
     } catch (error) {
       console.error('API triageEmergency Error:', error);
       return res.status(500).json({ success: false, message: error.message });
@@ -386,7 +519,6 @@ export class ApiController {
         updated_by_user_id: req.session.user.user_id,
       });
 
-      // Kaskade ke seluruh laporan turunan (Child Reports)
       if (report.similarReports && report.similarReports.length > 0) {
         for (const child of report.similarReports) {
           const childOld = child.status;
@@ -405,7 +537,7 @@ export class ApiController {
 
       return res.json({
         success: true,
-        message: `Status berhasil diperbarui ke '${status}' dan disinkronkan ke ${report.ChildReports?.length || 0} laporan serupa.`,
+        message: `Status berhasil diperbarui ke '${status}' dan disinkronkan ke ${report.similarReports?.length || 0} laporan serupa.`,
       });
     } catch (error) {
       console.error('API updateStatus Error:', error);

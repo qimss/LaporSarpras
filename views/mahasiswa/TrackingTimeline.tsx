@@ -9,18 +9,23 @@ interface TrackingTimelineProps {
 
 export function TrackingTimeline({ initialTicket = '', onBack }: TrackingTimelineProps) {
   const [ticketInput, setTicketInput] = useState(initialTicket);
-  const [report, setReport] = useState<Report | null>(null);
+  const [report, setReport] = useState<Report | any>(null);
   const [stepIndex, setStepIndex] = useState(1);
   const [statusLogs, setStatusLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   async function fetchTracking(ticket: string) {
-    if (!ticket.trim()) return;
+    const cleanTicket = ticket.replace(/^#/, '').trim().toUpperCase();
+    if (!cleanTicket) {
+      setError('Ketik nomor tiket terlebih dahulu (contoh: TKT-20261124-0011).');
+      return;
+    }
+
     setLoading(true);
     setError('');
     try {
-      const res = await api.getTracking(ticket.trim());
+      const res = await api.getTracking(cleanTicket);
       if (res.success && res.report) {
         setReport(res.report);
         setStepIndex(res.stepIndex || 1);
@@ -39,6 +44,7 @@ export function TrackingTimeline({ initialTicket = '', onBack }: TrackingTimelin
 
   useEffect(() => {
     if (initialTicket) {
+      setTicketInput(initialTicket);
       fetchTracking(initialTicket);
     }
   }, [initialTicket]);
@@ -50,118 +56,358 @@ export function TrackingTimeline({ initialTicket = '', onBack }: TrackingTimelin
     { title: 'Selesai', desc: 'Tuntas' },
   ];
 
+  const getStatusBadgeStyle = (status: string) => {
+    if (status === 'Selesai') {
+      return { backgroundColor: '#DCFCE7', color: '#166534', border: '1px solid #86EFAC' };
+    }
+    if (status === 'Diproses') {
+      return { backgroundColor: '#FEF3C7', color: '#92400E', border: '1px solid #FCD34D' };
+    }
+    if (status === 'Dugaan Mendesak') {
+      return { backgroundColor: '#FEE2E2', color: '#B91C1C', border: '1px solid #FCA5A5' };
+    }
+    return { backgroundColor: '#ECFDF5', color: '#065F46', border: '1px solid #A7F3D0' };
+  };
+
+  const parentTicket = report?.ParentReport || report?.parentReport;
+
   return (
-    <div className="tracking-page max-w-2xl mx-auto py-4 px-3 sm:px-4">
-      {/* Header & Back */}
-      <div className="flex items-center justify-between mb-4">
-        {onBack && (
+    <div style={{ width: '100%', maxWidth: '720px', margin: '0 auto', padding: '16px 16px 44px' }}>
+      {/* Header & Tombol Kembali */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '12px',
+          marginBottom: '18px',
+        }}
+      >
+        {onBack ? (
           <button
             type="button"
             onClick={onBack}
-            className="text-xs text-[#5F6E6A] hover:text-[#0F6B5C] flex items-center gap-1"
+            style={{
+              padding: '8px 14px',
+              backgroundColor: '#FFFFFF',
+              border: '1.5px solid #CBD5E1',
+              borderRadius: '10px',
+              fontSize: '14px',
+              fontWeight: 700,
+              color: '#0F172A',
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+            }}
           >
             ← Kembali
           </button>
+        ) : (
+          <div style={{ width: '76px' }} />
         )}
-        <h1 className="text-lg font-bold text-[#14201E]">Pelacakan Status Pengaduan</h1>
-        <span />
+
+        <h1 style={{ margin: 0, fontSize: '21px', fontWeight: 800, color: '#0F172A', textAlign: 'center' }}>
+          Pelacakan Status Pengaduan
+        </h1>
+
+        <div style={{ width: '76px' }} />
       </div>
 
       {/* Input Pencarian Tiket */}
-      <div className="bg-white border border-[#DCE1DC] rounded-[14px] p-3.5 mb-5 shadow-xs">
+      <div
+        style={{
+          backgroundColor: '#FFFFFF',
+          border: '1px solid #CBD5E1',
+          borderRadius: '16px',
+          padding: '16px',
+          marginBottom: '20px',
+          boxShadow: '0 4px 14px rgba(15, 23, 42, 0.05)',
+        }}
+      >
         <form
           onSubmit={(e) => {
             e.preventDefault();
             fetchTracking(ticketInput);
           }}
-          className="flex gap-2"
+          style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}
         >
           <input
             type="text"
             value={ticketInput}
             onChange={(e) => setTicketInput(e.target.value)}
-            placeholder="Ketik nomor tiket: TKT-20261116-0001"
-            className="flex-1 h-[40px] px-3.5 bg-white border border-[#DCE1DC] rounded-[8px] text-xs sm:text-sm font-mono uppercase focus:outline-none focus:border-[#0F6B5C]"
+            placeholder="Ketik nomor tiket: TKT-20261124-0011"
+            style={{
+              flex: '1 1 220px',
+              height: '46px',
+              padding: '0 14px',
+              backgroundColor: '#FFFFFF',
+              border: '1.5px solid #94A3B8',
+              borderRadius: '10px',
+              fontSize: '15.5px',
+              fontWeight: 700,
+              fontFamily: 'monospace',
+              textTransform: 'uppercase',
+              color: '#0F172A',
+              outline: 'none',
+            }}
           />
           <button
             type="submit"
             disabled={loading}
-            className="h-[40px] px-4 bg-[#0F6B5C] hover:bg-[#0c574a] text-white rounded-[8px] text-xs font-semibold shadow-xs transition-colors"
+            style={{
+              height: '46px',
+              padding: '0 22px',
+              backgroundColor: loading ? '#64748B' : '#0F6B54',
+              color: '#FFFFFF',
+              border: 'none',
+              borderRadius: '10px',
+              fontSize: '15px',
+              fontWeight: 700,
+              cursor: loading ? 'not-allowed' : 'pointer',
+              whiteSpace: 'nowrap',
+            }}
           >
             {loading ? 'Mencari…' : 'Cek Status'}
           </button>
         </form>
       </div>
 
+      {/* Alert Error Kontras Tinggi */}
       {error && (
-        <div className="p-3.5 mb-5 rounded-[12px] bg-red-50 border border-red-200 text-xs text-red-700">
+        <div
+          style={{
+            padding: '14px 18px',
+            marginBottom: '20px',
+            borderRadius: '12px',
+            backgroundColor: '#DC2626',
+            color: '#FFFFFF',
+            fontSize: '14.5px',
+            fontWeight: 700,
+            boxShadow: '0 6px 16px rgba(220, 38, 38, 0.25)',
+          }}
+        >
           ⚠️ {error}
         </div>
       )}
 
       {report && (
-        <div className="space-y-4">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
           {/* Card Ringkasan Tiket */}
-          <div className="bg-white border border-[#DCE1DC] rounded-[14px] p-4 shadow-xs">
-            <div className="flex justify-between items-start mb-2">
+          <div
+            style={{
+              backgroundColor: '#FFFFFF',
+              border: '1px solid #CBD5E1',
+              borderRadius: '16px',
+              padding: '20px',
+              boxShadow: '0 4px 14px rgba(15, 23, 42, 0.05)',
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'flex-start',
+                gap: '12px',
+                flexWrap: 'wrap',
+              }}
+            >
               <div>
-                <strong className="text-sm sm:text-base text-[#14201E] block">{report.nama_fasilitas}</strong>
-                <p className="text-xs text-[#5F6E6A] font-mono">#{report.ticket_number} • {report.kode_lokasi}</p>
+                <strong style={{ fontSize: '19px', fontWeight: 800, color: '#0F172A', display: 'block', marginBottom: '4px' }}>
+                  {report.nama_fasilitas}
+                </strong>
+                <p style={{ margin: 0, fontSize: '14px', fontWeight: 600, color: '#334155', fontFamily: 'monospace' }}>
+                  #{report.ticket_number} • {report.kode_lokasi}
+                </p>
               </div>
+
               <span
-                className={`px-3 py-1 rounded-full text-xs font-bold ${
-                  report.status === 'Selesai'
-                    ? 'bg-[#DDF0E3] text-[#256B43]'
-                    : report.status === 'Diproses'
-                    ? 'bg-[#FBEACB] text-[#8A5A00]'
-                    : report.status === 'Dugaan Mendesak'
-                    ? 'bg-[#F9E1DE] text-[#A8261D]'
-                    : 'bg-[#DDEFEA] text-[#0F6B5C]'
-                }`}
+                style={{
+                  padding: '6px 14px',
+                  borderRadius: '999px',
+                  fontSize: '13px',
+                  fontWeight: 800,
+                  ...getStatusBadgeStyle(report.status),
+                }}
               >
                 {report.status}
               </span>
             </div>
 
+            {report.deskripsi_kerusakan && (
+              <p
+                style={{
+                  margin: '14px 0 0',
+                  paddingTop: '12px',
+                  borderTop: '1px solid #E2E8F0',
+                  fontSize: '14.5px',
+                  color: '#1E293B',
+                  lineHeight: 1.55,
+                }}
+              >
+                {report.deskripsi_kerusakan}
+              </p>
+            )}
+
             {/* Banner Sinkronisasi Kluster AI jika terhubung dengan Induk */}
-            {report.ParentReport && (
-              <div className="mt-3 p-2.5 rounded-[10px] bg-[#EDF7F4] border border-[#DDEFEA] text-xs text-[#0F6B5C] flex items-center gap-2">
-                <span>🔗</span>
+            {parentTicket && (
+              <div
+                style={{
+                  marginTop: '14px',
+                  padding: '12px 14px',
+                  borderRadius: '12px',
+                  backgroundColor: '#ECFDF5',
+                  border: '1.5px solid #A7F3D0',
+                  fontSize: '14px',
+                  color: '#065F46',
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: '10px',
+                  lineHeight: 1.5,
+                }}
+              >
+                <span style={{ fontSize: '18px' }}>🔗</span>
                 <span>
-                  Laporan Anda digabungkan dengan tiket induk <strong>#{report.ParentReport.ticket_number}</strong> untuk penanganan terpadu. Status pengerjaan otomatis tersinkronisasi.
+                  Laporan Anda digabungkan dengan tiket induk <strong>#{parentTicket.ticket_number}</strong> untuk penanganan terpadu. Status pengerjaan otomatis tersinkronisasi.
                 </span>
+              </div>
+            )}
+
+            {/* Panel Hasil Fiksasi Analisis AI */}
+            {(report.aiAnalysis || report.AIAnalysisResult) && (
+              <div
+                style={{
+                  marginTop: '16px',
+                  padding: '14px 16px',
+                  borderRadius: '12px',
+                  backgroundColor: '#F0FDF4',
+                  border: '1.5px solid #BBF7D0',
+                  textAlign: 'left',
+                }}
+              >
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: '8px',
+                    marginBottom: '6px',
+                    flexWrap: 'wrap',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ fontSize: '16px' }}>🤖</span>
+                    <strong style={{ fontSize: '12.5px', color: '#166534', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                      Hasil Analisis Cerdas AI
+                    </strong>
+                  </div>
+                  <span
+                    style={{
+                      fontSize: '11.5px',
+                      fontWeight: 800,
+                      padding: '3px 10px',
+                      borderRadius: '999px',
+                      backgroundColor:
+                        (report.aiAnalysis || report.AIAnalysisResult)?.rekomendasi_prioritas === 'Tinggi' ||
+                        (report.aiAnalysis || report.AIAnalysisResult)?.rekomendasi_prioritas === 'Kritis'
+                          ? '#FEE2E2'
+                          : (report.aiAnalysis || report.AIAnalysisResult)?.rekomendasi_prioritas === 'Sedang'
+                          ? '#FEF3C7'
+                          : '#DCFCE7',
+                      color:
+                        (report.aiAnalysis || report.AIAnalysisResult)?.rekomendasi_prioritas === 'Tinggi' ||
+                        (report.aiAnalysis || report.AIAnalysisResult)?.rekomendasi_prioritas === 'Kritis'
+                          ? '#B91C1C'
+                          : (report.aiAnalysis || report.AIAnalysisResult)?.rekomendasi_prioritas === 'Sedang'
+                          ? '#92400E'
+                          : '#15803D',
+                    }}
+                  >
+                    Prioritas {(report.aiAnalysis || report.AIAnalysisResult)?.rekomendasi_prioritas} ({Math.round(((report.aiAnalysis || report.AIAnalysisResult)?.skor_keyakinan || 0.88) * 100)}%)
+                  </span>
+                </div>
+                <p style={{ margin: '0 0 6px', fontSize: '13px', color: '#1E293B', lineHeight: 1.5 }}>
+                  {(report.aiAnalysis || report.AIAnalysisResult)?.alasan_ringkas}
+                </p>
+                <div style={{ fontSize: '12.5px', color: '#15803D', fontWeight: 700 }}>
+                  💡 Rekomendasi: {(report.aiAnalysis || report.AIAnalysisResult)?.rekomendasi_tindakan}
+                </div>
               </div>
             )}
           </div>
 
           {/* 4-Step Stepper Progress Bar */}
-          <div className="bg-white border border-[#DCE1DC] rounded-[14px] p-4 sm:p-5 shadow-xs">
-            <h2 className="text-xs font-semibold text-[#5F6E6A] uppercase tracking-wider mb-4">
+          <div
+            style={{
+              backgroundColor: '#FFFFFF',
+              border: '1px solid #CBD5E1',
+              borderRadius: '16px',
+              padding: '20px',
+              boxShadow: '0 4px 14px rgba(15, 23, 42, 0.05)',
+            }}
+          >
+            <h2
+              style={{
+                margin: '0 0 18px',
+                fontSize: '13.5px',
+                fontWeight: 800,
+                color: '#334155',
+                textTransform: 'uppercase',
+                letterSpacing: '0.04em',
+              }}
+            >
               Tahapan Progres Penanganan
             </h2>
-            <div className="grid grid-cols-4 gap-1 text-center relative">
+
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(4, 1fr)',
+                gap: '8px',
+                textAlign: 'center',
+              }}
+            >
               {steps.map((st, idx) => {
                 const stepNum = idx + 1;
                 const isPassed = stepIndex >= stepNum;
                 const isCurrent = stepIndex === stepNum;
 
                 return (
-                  <div key={st.title} className="flex flex-col items-center">
+                  <div key={st.title} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                     <div
-                      className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs transition-colors mb-1.5 ${
-                        isCurrent
-                          ? 'bg-[#0F6B5C] text-white ring-4 ring-[#0F6B5C]/20'
+                      style={{
+                        width: '38px',
+                        height: '38px',
+                        borderRadius: '50%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontWeight: 800,
+                        fontSize: '15px',
+                        marginBottom: '8px',
+                        backgroundColor: isCurrent ? '#0F6B54' : isPassed ? '#DCFCE7' : '#F1F5F9',
+                        color: isCurrent ? '#FFFFFF' : isPassed ? '#166534' : '#475569',
+                        border: isCurrent
+                          ? '2px solid #064E3B'
                           : isPassed
-                          ? 'bg-[#DDF0E3] text-[#256B43]'
-                          : 'bg-[#F5F6F2] text-[#8A9692] border border-[#DCE1DC]'
-                      }`}
+                          ? '1.5px solid #86EFAC'
+                          : '1.5px solid #CBD5E1',
+                        boxShadow: isCurrent ? '0 0 0 4px rgba(15, 107, 84, 0.18)' : 'none',
+                      }}
                     >
                       {isPassed && !isCurrent ? '✓' : stepNum}
                     </div>
-                    <strong className={`text-xs block ${isCurrent ? 'text-[#0F6B5C] font-bold' : isPassed ? 'text-[#14201E]' : 'text-[#8A9692]'}`}>
+                    <strong
+                      style={{
+                        fontSize: '14px',
+                        fontWeight: 800,
+                        display: 'block',
+                        color: isCurrent ? '#0F6B54' : isPassed ? '#0F172A' : '#475569',
+                      }}
+                    >
                       {st.title}
                     </strong>
-                    <small className="text-[10px] text-[#8A9692] hidden sm:block">{st.desc}</small>
+                    <small style={{ fontSize: '12px', fontWeight: 500, color: '#475569', marginTop: '2px' }}>
+                      {st.desc}
+                    </small>
                   </div>
                 );
               })}
@@ -169,21 +415,72 @@ export function TrackingTimeline({ initialTicket = '', onBack }: TrackingTimelin
           </div>
 
           {/* Linimasa Catatan Petugas */}
-          <div className="bg-white border border-[#DCE1DC] rounded-[14px] p-4 shadow-xs">
-            <h2 className="text-xs font-semibold text-[#5F6E6A] uppercase tracking-wider mb-3">
-              Linimasa Audit &amp; Catatan Petugas
+          <div
+            style={{
+              backgroundColor: '#FFFFFF',
+              border: '1px solid #CBD5E1',
+              borderRadius: '16px',
+              padding: '20px',
+              boxShadow: '0 4px 14px rgba(15, 23, 42, 0.05)',
+            }}
+          >
+            <h2
+              style={{
+                margin: '0 0 16px',
+                fontSize: '13.5px',
+                fontWeight: 800,
+                color: '#334155',
+                textTransform: 'uppercase',
+                letterSpacing: '0.04em',
+              }}
+            >
+              Linimasa Audit & Catatan Petugas
             </h2>
 
             {statusLogs.length === 0 ? (
-              <p className="text-xs text-[#8A9692] italic">Belum ada catatan pembaruan status.</p>
+              <p style={{ margin: 0, fontSize: '14px', color: '#475569', fontStyle: 'italic' }}>
+                Belum ada catatan pembaruan status.
+              </p>
             ) : (
-              <div className="space-y-3 relative pl-4 border-l-2 border-[#DCE1DC] ml-2">
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '16px',
+                  position: 'relative',
+                  paddingLeft: '18px',
+                  borderLeft: '2.5px solid #CBD5E1',
+                  marginLeft: '6px',
+                }}
+              >
                 {statusLogs.map((log, i) => (
-                  <div key={log.log_id || i} className="relative">
-                    <span className="absolute -left-[21px] top-1 w-2.5 h-2.5 rounded-full bg-[#0F6B5C]" />
-                    <div className="flex items-center justify-between mb-0.5">
-                      <span className="text-xs font-bold text-[#14201E]">{log.status_sesudah || log.status}</span>
-                      <time className="text-[11px] text-[#8A9692]">
+                  <div key={log.log_id || i} style={{ position: 'relative' }}>
+                    <span
+                      style={{
+                        position: 'absolute',
+                        left: '-25px',
+                        top: '4px',
+                        width: '12px',
+                        height: '12px',
+                        borderRadius: '50%',
+                        backgroundColor: '#0F6B54',
+                        border: '2px solid #FFFFFF',
+                      }}
+                    />
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: '8px',
+                        flexWrap: 'wrap',
+                        marginBottom: '4px',
+                      }}
+                    >
+                      <span style={{ fontSize: '15px', fontWeight: 800, color: '#0F172A' }}>
+                        {log.status_sesudah || log.status}
+                      </span>
+                      <time style={{ fontSize: '12.5px', fontWeight: 600, color: '#475569' }}>
                         {new Date(log.created_at).toLocaleString('id-ID', {
                           day: 'numeric',
                           month: 'short',
@@ -192,7 +489,9 @@ export function TrackingTimeline({ initialTicket = '', onBack }: TrackingTimelin
                         })}
                       </time>
                     </div>
-                    <p className="text-xs text-[#5F6E6A]">{log.catatan_petugas || log.keterangan}</p>
+                    <p style={{ margin: 0, fontSize: '14px', color: '#334155', lineHeight: 1.5 }}>
+                      {log.catatan_petugas || log.keterangan}
+                    </p>
                   </div>
                 ))}
               </div>
@@ -203,3 +502,5 @@ export function TrackingTimeline({ initialTicket = '', onBack }: TrackingTimelin
     </div>
   );
 }
+
+export default TrackingTimeline;

@@ -17,9 +17,24 @@ export function AdminDashboard({ onViewTracking }: AdminDashboardProps) {
   const [loading, setLoading] = useState(true);
   const [aiRunning, setAiRunning] = useState(false);
   const [error, setError] = useState('');
+  const [popup, setPopup] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
+
+  const todayFormatted = new Date().toLocaleDateString('id-ID', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  });
+
+  useEffect(() => {
+    if (!popup) return;
+    const timer = setTimeout(() => setPopup(null), 4500);
+    return () => clearTimeout(timer);
+  }, [popup]);
 
   async function loadDashboardData() {
     setLoading(true);
+    setError('');
     try {
       const res = await api.getAdminDashboard();
       if (res.success) {
@@ -46,26 +61,96 @@ export function AdminDashboard({ onViewTracking }: AdminDashboardProps) {
     try {
       const res = await api.runBatchAI();
       if (res.success) {
-        alert(res.message);
-        loadDashboardData();
+        setPopup({ msg: res.message || 'Siklus analisis AI berhasil dijalankan!', type: 'success' });
+        await loadDashboardData();
       } else {
-        alert(res.message || 'Gagal menjalankan siklus AI.');
+        setPopup({ msg: res.message || 'Gagal menjalankan siklus AI.', type: 'error' });
       }
     } catch (err: any) {
-      alert(err.message || 'Gagal memicu batch AI.');
+      setPopup({ msg: err.message || 'Gagal memicu batch AI.', type: 'error' });
     } finally {
       setAiRunning(false);
     }
   }
 
   return (
-    <div className="space-y-6 max-w-6xl mx-auto py-4 px-3 sm:px-4">
+    <div
+      style={{
+        width: '100%',
+        maxWidth: '1140px',
+        margin: '0 auto',
+        padding: '20px 16px 48px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '22px',
+      }}
+    >
+      {/* Pop-up Toast Notifikasi Admin (Kontras Tinggi, Jelas di HP & Desktop) */}
+      {popup && (
+        <div
+          role="alert"
+          style={{
+            position: 'fixed',
+            top: '20px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 99999,
+            width: 'max-content',
+            minWidth: '300px',
+            maxWidth: 'calc(100vw - 32px)',
+            padding: '15px 22px',
+            borderRadius: '14px',
+            backgroundColor: popup.type === 'success' ? '#0F6B54' : '#DC2626',
+            color: '#FFFFFF',
+            border: popup.type === 'success' ? '2px solid #064E3B' : '2px solid #991B1B',
+            boxShadow: '0 18px 38px -8px rgba(15, 23, 42, 0.45)',
+            fontSize: '15px',
+            fontWeight: 700,
+            lineHeight: 1.45,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '14px',
+          }}
+        >
+          <span>
+            {popup.type === 'success' ? '✅' : '⚠️'} {popup.msg}
+          </span>
+          <button
+            type="button"
+            onClick={() => setPopup(null)}
+            style={{
+              background: 'rgba(255,255,255,0.2)',
+              border: 'none',
+              color: '#FFFFFF',
+              borderRadius: '8px',
+              padding: '4px 9px',
+              fontSize: '13px',
+              fontWeight: 800,
+              cursor: 'pointer',
+            }}
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       {/* Header Pusat Kendali Operasional */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: '14px',
+          flexWrap: 'wrap',
+        }}
+      >
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-[#14201E]">Pusat Kendali Operasional Sarpras</h1>
-          <p className="text-xs text-[#5F6E6A]">
-            Senin, 16 November 2026 • Penjadwalan Cron AI otomatis berjalan setiap pukul 03.00 WIB
+          <h1 style={{ margin: 0, fontSize: '23px', fontWeight: 800, color: '#0F172A', letterSpacing: '-0.01em' }}>
+            Pusat Kendali Operasional Sarpras
+          </h1>
+          <p style={{ margin: '5px 0 0', fontSize: '14px', fontWeight: 500, color: '#334155', lineHeight: 1.5 }}>
+            {todayFormatted} • Penjadwalan Cron AI otomatis berjalan setiap pukul 03.00 WIB
           </p>
         </div>
 
@@ -73,9 +158,20 @@ export function AdminDashboard({ onViewTracking }: AdminDashboardProps) {
           type="button"
           disabled={aiRunning}
           onClick={handleRunAI}
-          className={`h-[42px] px-4 rounded-[10px] text-xs font-semibold text-white shadow-xs flex items-center gap-2 transition-all ${
-            aiRunning ? 'bg-[#5F6E6A] cursor-not-allowed' : 'bg-[#0F6B5C] hover:bg-[#0c574a]'
-          }`}
+          style={{
+            padding: '12px 20px',
+            borderRadius: '11px',
+            border: 'none',
+            backgroundColor: aiRunning ? '#64748B' : '#0F6B54',
+            color: '#FFFFFF',
+            fontSize: '14.5px',
+            fontWeight: 700,
+            cursor: aiRunning ? 'not-allowed' : 'pointer',
+            boxShadow: '0 4px 12px rgba(15, 107, 84, 0.24)',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '8px',
+          }}
         >
           <span>🤖</span>
           <span>{aiRunning ? 'Siklus AI Sedang Berjalan…' : 'Jalankan Siklus AI Sekarang'}</span>
@@ -83,46 +179,120 @@ export function AdminDashboard({ onViewTracking }: AdminDashboardProps) {
       </div>
 
       {error && (
-        <div className="p-3.5 rounded-[12px] bg-red-50 border border-red-200 text-xs text-red-700">
+        <div
+          style={{
+            padding: '14px 18px',
+            borderRadius: '12px',
+            backgroundColor: '#DC2626',
+            color: '#FFFFFF',
+            fontSize: '14.5px',
+            fontWeight: 700,
+            boxShadow: '0 6px 16px rgba(220, 38, 38, 0.25)',
+          }}
+        >
           ⚠️ {error}
         </div>
       )}
 
-      {/* KPI Cards Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
-        <div className="bg-white border border-[#DCE1DC] rounded-[14px] p-4 shadow-xs">
-          <small className="text-[11px] font-semibold text-[#5F6E6A] block mb-1">Total Pengaduan</small>
-          <strong className="text-2xl sm:text-3xl font-bold text-[#14201E]">{kpis.total}</strong>
+      {/* KPI Cards Grid (Responsif HP & Desktop) */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))',
+          gap: '14px',
+        }}
+      >
+        <div
+          style={{
+            backgroundColor: '#FFFFFF',
+            border: '1.5px solid #CBD5E1',
+            borderRadius: '14px',
+            padding: '18px 20px',
+            boxShadow: '0 4px 12px rgba(15, 23, 42, 0.04)',
+          }}
+        >
+          <div style={{ fontSize: '13.5px', fontWeight: 700, color: '#334155', marginBottom: '6px' }}>
+            Total Pengaduan
+          </div>
+          <div style={{ fontSize: '30px', fontWeight: 800, color: '#0F172A' }}>{kpis.total}</div>
         </div>
 
-        <div className="bg-white border border-red-200 rounded-[14px] p-4 shadow-xs bg-red-50/20">
-          <small className="text-[11px] font-semibold text-[#A8261D] block mb-1">Dugaan Mendesak</small>
-          <strong className="text-2xl sm:text-3xl font-bold text-[#A8261D]">{kpis.urgent}</strong>
+        <div
+          style={{
+            backgroundColor: '#FEF2F2',
+            border: '1.5px solid #FCA5A5',
+            borderRadius: '14px',
+            padding: '18px 20px',
+            boxShadow: '0 4px 12px rgba(220, 38, 38, 0.05)',
+          }}
+        >
+          <div style={{ fontSize: '13.5px', fontWeight: 700, color: '#B91C1C', marginBottom: '6px' }}>
+            Dugaan Mendesak
+          </div>
+          <div style={{ fontSize: '30px', fontWeight: 800, color: '#DC2626' }}>{kpis.urgent}</div>
         </div>
 
-        <div className="bg-white border border-amber-200 rounded-[14px] p-4 shadow-xs bg-amber-50/20">
-          <small className="text-[11px] font-semibold text-[#8A5A00] block mb-1">Sedang Dikerjakan</small>
-          <strong className="text-2xl sm:text-3xl font-bold text-[#8A5A00]">{kpis.inProgress}</strong>
+        <div
+          style={{
+            backgroundColor: '#FFFBEB',
+            border: '1.5px solid #FCD34D',
+            borderRadius: '14px',
+            padding: '18px 20px',
+            boxShadow: '0 4px 12px rgba(217, 119, 6, 0.05)',
+          }}
+        >
+          <div style={{ fontSize: '13.5px', fontWeight: 700, color: '#92400E', marginBottom: '6px' }}>
+            Sedang Dikerjakan
+          </div>
+          <div style={{ fontSize: '30px', fontWeight: 800, color: '#B45309' }}>{kpis.inProgress}</div>
         </div>
 
-        <div className="bg-white border border-green-200 rounded-[14px] p-4 shadow-xs bg-green-50/20">
-          <small className="text-[11px] font-semibold text-[#256B43] block mb-1">Selesai Diperbaiki</small>
-          <strong className="text-2xl sm:text-3xl font-bold text-[#256B43]">{kpis.completed}</strong>
+        <div
+          style={{
+            backgroundColor: '#F0FDF4',
+            border: '1.5px solid #86EFAC',
+            borderRadius: '14px',
+            padding: '18px 20px',
+            boxShadow: '0 4px 12px rgba(22, 163, 74, 0.05)',
+          }}
+        >
+          <div style={{ fontSize: '13.5px', fontWeight: 700, color: '#166534', marginBottom: '6px' }}>
+            Selesai Diperbaiki
+          </div>
+          <div style={{ fontSize: '30px', fontWeight: 800, color: '#15803D' }}>{kpis.completed}</div>
         </div>
       </div>
 
-      {/* Panel Triage Bahaya Red Alert */}
-      <TriagePanel emergencyList={emergencyList} onRefresh={loadDashboardData} />
+      {loading ? (
+        <div
+          style={{
+            textAlign: 'center',
+            padding: '40px',
+            fontSize: '15px',
+            fontWeight: 600,
+            color: '#334155',
+          }}
+        >
+          Memuat data operasional Sarpras…
+        </div>
+      ) : (
+        <>
+          {/* Panel Triage Bahaya Red Alert */}
+          <TriagePanel emergencyList={emergencyList} onRefresh={loadDashboardData} />
 
-      {/* Tabel Pengelompokan Kluster AI */}
-      <ClusterTable clusteredReports={clusteredReports} onRefresh={loadDashboardData} />
+          {/* Tabel Pengelompokan Kluster AI */}
+          <ClusterTable clusteredReports={clusteredReports} onRefresh={loadDashboardData} />
 
-      {/* Tabel Semua Laporan Raw */}
-      <ReportList
-        reports={allReports}
-        onRefresh={loadDashboardData}
-        onViewTracking={onViewTracking}
-      />
+          {/* Tabel Semua Laporan Raw */}
+          <ReportList
+            reports={allReports}
+            onRefresh={loadDashboardData}
+            onViewTracking={onViewTracking}
+          />
+        </>
+      )}
     </div>
   );
 }
+
+export default AdminDashboard;

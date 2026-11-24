@@ -14,7 +14,8 @@ router.post('/auth/logout', ApiController.logout);
 // ==========================================
 // 2. Mahasiswa & Tracking Endpoints
 // ==========================================
-router.post('/reports', uploadPhoto.single('foto'), ApiController.createReport);
+// Menerima nama field file bebas (foto_bukti, foto, dll.)
+router.post('/reports', uploadPhoto.any(), ApiController.createReport);
 router.get('/reports/my', ApiController.getMyReports);
 router.get('/reports/:ticketNumber', ApiController.getTracking);
 

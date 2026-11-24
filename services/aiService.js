@@ -17,40 +17,80 @@ dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// 1. INFERENSI MODEL MACHINE LEARNING TERLATIH LOKAL (Python)
+const VALID_PRIORITIES = ['Rendah', 'Sedang', 'Tinggi'];
+
+function normalizeAIOutput(raw = {}, fallbackData = {}, source = 'Fallback Rule Engine') {
+  const rawPrio = String(raw.prioritas || fallbackData.prioritas || 'Sedang').trim().toLowerCase();
+  let fixedPriority = 'Sedang';
+  if (['rendah', 'low'].includes(rawPrio)) fixedPriority = 'Rendah';
+  else if (['sedang', 'medium', 'normal'].includes(rawPrio)) fixedPriority = 'Sedang';
+  else if (['tinggi', 'high', 'kritis', 'critical', 'darurat', 'emergency', 'urgent'].includes(rawPrio)) {
+    fixedPriority = 'Tinggi';
+  }
+
+  if (!VALID_PRIORITIES.includes(fixedPriority)) {
+    fixedPriority = 'Sedang';
+  }
+
+  let confidence = Number(raw.skor_keyakinan ?? fallbackData.skor_keyakinan ?? 0.85);
+  if (Number.isNaN(confidence)) confidence = 0.85;
+  if (confidence > 1) confidence = confidence / 100;
+  confidence = Math.min(1, Math.max(0.1, Number(confidence.toFixed(2))));
+
+  let keywords = raw.kata_kunci_utama ?? fallbackData.kata_kunci_utama ?? 'kerusakan fasilitas';
+  if (Array.isArray(keywords)) {
+    keywords = keywords.join(', ');
+  }
+  keywords = String(keywords).trim().slice(0, 250) || 'kerusakan fasilitas';
+
+  const alasan =
+    String(raw.alasan_ringkas || fallbackData.alasan_ringkas || 'Laporan kerusakan fasilitas memerlukan peninjauan teknis.').trim();
+
+  const rekomendasi =
+    String(raw.rekomendasi_tindakan || fallbackData.rekomendasi_tindakan || 'Jadwalkan inspeksi petugas sarana dan prasarana ke lokasi terkait.').trim();
+
+  return {
+    source,
+    prioritas: fixedPriority,
+    skor_keyakinan: confidence,
+    kata_kunci_utama: keywords,
+    alasan_ringkas: alasan,
+    rekomendasi_tindakan: rekomendasi,
+  };
+}
+
 export const predictWithLocalML = (text) => {
   return new Promise((resolve) => {
     const scriptPath = path.join(__dirname, '..', 'scripts', 'predict_severity.py');
-    
-    execFile('python', [scriptPath, text], (error, stdout, stderr) => {
+
+    execFile('python', [scriptPath, text], { timeout: 5000 }, (error, stdout, stderr) => {
       if (error || !stdout) {
         console.warn('⚠️ Fallback ke Rule Engine Lokal:', stderr || error?.message);
         return resolve(null);
       }
       try {
-        const result = JSON.parse(stdout.trim());
+        const cleaned = stdout.trim().replace(/^```json\s*/i, '').replace(/```$/i, '');
+        const result = JSON.parse(cleaned);
         resolve(result);
-      } catch (e) {
+      } catch {
         resolve(null);
       }
     });
   });
 };
 
-// 2. ANALISIS DENGAN GOOGLE GEMINI API (LLM)
 export const analyzeWithGemini = async (kode_lokasi, nama_fasilitas, deskripsi) => {
   const apiKey = process.env.GEMINI_API_KEY;
-  let modelName = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+  let modelName = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
 
-  // Jika model lama 1.5-flash dipanggil, otomatis gunakan model 2.5-flash yang aktif
-  if (modelName === 'gemini-1.5-flash') {
-    modelName = 'gemini-2.5-flash';
+  if (modelName === 'gemini-1.5-flash' || modelName === 'gemini-2.5-flash') {
+    modelName = 'gemini-3.8-flash';
   }
 
   const isGoogleKey = apiKey && (apiKey.startsWith('AQ.') || apiKey.startsWith('AIzaSy'));
 
   if (!isGoogleKey || apiKey.startsWith('AIzaSy_masukkan')) {
-    console.log('ℹ️ Menggunakan Engine ML Terlatih Lokal / Rule Engine (API Key Gemini belum diset dengan key Google valid AIzaSy... / AQ...).');
+    console.log('ℹ️ Menggunakan Engine ML Terlatih Lokal / Rule Engine (API Key Gemini belum diset valid).');
     return null;
   }
 
@@ -59,6 +99,11 @@ ${SYSTEM_PROMPT}
 
 CONTOH REFERENSI:
 ${JSON.stringify(FEW_SHOT_EXAMPLES, null, 2)}
+
+ATURAN WAJIB OUTPUT JSON:
+- Nilai "prioritas" HANYA boleh salah satu dari: "Rendah", "Sedang", "Tinggi".
+- Nilai "skor_keyakinan" berupa angka desimal antara 0.50 sampai 0.99.
+- Semua field ("prioritas", "skor_keyakinan", "kata_kunci_utama", "alasan_ringkas", "rekomendasi_tindakan") wajib diisi dalam Bahasa Indonesia yang formal dan jelas.
 
 ANALISIS LAPORAN BERIKUT:
 Lokasi: ${kode_lokasi}
@@ -76,7 +121,7 @@ Balas HANYA dengan JSON valid sesuai skema yang diminta:
         contents: [{ parts: [{ text: promptText }] }],
         generationConfig: {
           response_mime_type: 'application/json',
-          temperature: 0.2,
+          temperature: 0.1,
         },
       },
       {
@@ -84,18 +129,19 @@ Balas HANYA dengan JSON valid sesuai skema yang diminta:
           'Content-Type': 'application/json',
           'x-goog-api-key': apiKey,
         },
-        timeout: 7000,
+        timeout: 3000,
       }
     );
 
     const candidate = response.data?.candidates?.[0]?.content?.parts?.[0]?.text;
     if (candidate) {
-      return JSON.parse(candidate);
+      const cleanJson = candidate.trim().replace(/^```json\s*/i, '').replace(/```$/i, '').trim();
+      return JSON.parse(cleanJson);
     }
   } catch (error) {
     const errDetails = error.response?.data?.error?.message || error.message;
     if (error.response?.status === 403) {
-      console.warn(`⚠️ Google Gemini Cloud mengembalikan 403 (Permission Denied: "${errDetails}"). Pastikan "Generative Language API" sudah di-Enable pada Google Cloud Console untuk project API Key ini.`);
+      console.warn(`⚠️ Google Gemini Cloud 403 (Permission Denied: "${errDetails}").`);
     } else {
       console.warn('⚠️ Gemini API tidak merespons, beralih ke Model Terlatih Lokal:', errDetails);
     }
@@ -103,63 +149,83 @@ Balas HANYA dengan JSON valid sesuai skema yang diminta:
   return null;
 };
 
-// 3. HYBRID ANALYZER: PENGGABUNGAN GEMINI + MODEL ML TERLATIH + FALLBACK
+// 3. HYBRID ANALYZER: PENGGABUNGAN GEMINI + MODEL ML TERLATIH + FALLBACK TERKUNCI
 export const analyzeReportPriority = async (kode_lokasi, nama_fasilitas, deskripsi) => {
-  // Coba Gemini API terlebih dahulu
-  const geminiResult = await analyzeWithGemini(kode_lokasi, nama_fasilitas, deskripsi);
-  if (geminiResult && geminiResult.prioritas) {
-    return {
-      source: 'Google Gemini LLM',
-      ...geminiResult,
-    };
+  const ruleFallback = analyzeWithRuleEngine(nama_fasilitas, deskripsi);
+
+  const lettersCount = `${nama_fasilitas} ${deskripsi}`.replace(/[^a-zA-Z]/g, '').length;
+  if (lettersCount < 6) {
+    return normalizeAIOutput(
+      {
+        prioritas: 'Rendah',
+        skor_keyakinan: 0.65,
+        kata_kunci_utama: 'perlu verifikasi manual',
+        alasan_ringkas: 'Deskripsi laporan terlalu singkat atau minim informasi teks.',
+        rekomendasi_tindakan: 'Admin Sarpras perlu menghubungi pelapor untuk konfirmasi detail kerusakan.',
+      },
+      ruleFallback,
+      'Validation Guardrail'
+    );
   }
 
-  // Jika Gemini offline/kuota habis, gunakan Model Machine Learning Terlatih lokal
+  const geminiResult = await analyzeWithGemini(kode_lokasi, nama_fasilitas, deskripsi);
+  if (geminiResult && geminiResult.prioritas) {
+    return normalizeAIOutput(geminiResult, ruleFallback, 'Google Gemini LLM');
+  }
+
   const combinedText = `${nama_fasilitas} ${deskripsi}`;
   const mlResult = await predictWithLocalML(combinedText);
   if (mlResult && mlResult.prioritas) {
-    const ruleFallback = analyzeWithRuleEngine(nama_fasilitas, deskripsi);
-    return {
-      source: 'Trained Machine Learning Model (Local)',
-      prioritas: mlResult.prioritas,
-      skor_keyakinan: mlResult.skor_keyakinan || 0.90,
-      kata_kunci_utama: ruleFallback.kata_kunci_utama,
-      alasan_ringkas: ruleFallback.alasan_ringkas,
-      rekomendasi_tindakan: ruleFallback.rekomendasi_tindakan,
-    };
+    return normalizeAIOutput(
+      {
+        ...ruleFallback,
+        prioritas: mlResult.prioritas,
+        skor_keyakinan: mlResult.skor_keyakinan || 0.90,
+      },
+      ruleFallback,
+      'Trained Machine Learning Model (Local)'
+    );
   }
 
-  // Fallback terakhir: Rule Engine Matriks Kata Kunci Bab 6.1
-  const ruleResult = analyzeWithRuleEngine(nama_fasilitas, deskripsi);
-  return {
-    source: 'Fallback Rule Engine',
-    ...ruleResult,
-  };
+  return normalizeAIOutput(ruleFallback, ruleFallback, 'Fallback Rule Engine');
 };
 
-// 4. LOGIKA CLUSTERING LAPORAN SERUPA (PENGELOMPOKAN LAPORAN DUPLIKAT)
 export const groupSimilarReports = (reports) => {
   const clusters = [];
   const processedIds = new Set();
+
+  const normalizeFacility = (str) =>
+    String(str || '')
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
 
   for (let i = 0; i < reports.length; i++) {
     const rep = reports[i];
     if (processedIds.has(rep.report_id)) continue;
 
-    // Buat kelompok baru untuk ruangan & fasilitas yang sama
     const cluster = {
       parent: rep,
       children: [],
     };
     processedIds.add(rep.report_id);
 
-    // Cari laporan lain di ruangan yang sama dengan fasilitas identik/mirip
+    const repLoc = rep.kode_lokasi.trim().toLowerCase();
+    const repFac = normalizeFacility(rep.nama_fasilitas);
+
     for (let j = i + 1; j < reports.length; j++) {
       const other = reports[j];
       if (processedIds.has(other.report_id)) continue;
 
-      const sameLocation = rep.kode_lokasi.trim().toLowerCase() === other.kode_lokasi.trim().toLowerCase();
-      const sameFacility = rep.nama_fasilitas.trim().toLowerCase() === other.nama_fasilitas.trim().toLowerCase();
+      const otherLoc = other.kode_lokasi.trim().toLowerCase();
+      const otherFac = normalizeFacility(other.nama_fasilitas);
+
+      const sameLocation = repLoc === otherLoc;
+      const sameFacility =
+        repFac === otherFac ||
+        (repFac.length >= 3 && otherFac.includes(repFac)) ||
+        (otherFac.length >= 3 && repFac.includes(otherFac));
 
       if (sameLocation && sameFacility) {
         cluster.children.push(other);
@@ -173,11 +239,9 @@ export const groupSimilarReports = (reports) => {
   return clusters;
 };
 
-// 5. TASK SCHEDULER BATCH (CRON 03.00 PAGI ATAU MANUAL TRIGGER ADMIN)
 export const processDailyBatch = async () => {
   console.log('🤖 Menjalankan Modul Batch AI Sarpras...');
 
-  // Ambil semua laporan yang berstatus 'Menunggu Analisis AI'
   const pendingReports = await Report.findAll({
     where: {
       status: 'Menunggu Analisis AI',
@@ -202,7 +266,6 @@ export const processDailyBatch = async () => {
       const children = cluster.children;
       const totalCount = 1 + children.length;
 
-      // Hubungkan laporan anak ke Parent Report
       for (const child of children) {
         await child.update(
           {
@@ -213,14 +276,12 @@ export const processDailyBatch = async () => {
         );
       }
 
-      // Analisis prioritas untuk Laporan Induk
       const aiResult = await analyzeReportPriority(
         parent.kode_lokasi,
         parent.nama_fasilitas,
         parent.deskripsi_kerusakan
       );
 
-      // Simpan hasil analisis AI ke tabel ai_analysis_results
       await AIAnalysisResult.create(
         {
           report_id: parent.report_id,
@@ -234,7 +295,6 @@ export const processDailyBatch = async () => {
         { transaction }
       );
 
-      // Perbarui status Laporan Induk menjadi 'Diterima'
       await parent.update(
         {
           status: 'Diterima',
@@ -242,14 +302,13 @@ export const processDailyBatch = async () => {
         { transaction }
       );
 
-      // Catat log status
       await ReportStatusLog.create(
         {
           report_id: parent.report_id,
           status_sebelum: 'Menunggu Analisis AI',
           status_sesudah: 'Diterima',
           catatan_petugas: `Dianalisis otomatis oleh AI (${aiResult.source}). Ditetapkan prioritas ${aiResult.prioritas}. Menampung ${totalCount} laporan serupa.`,
-          updated_by_user_id: null, // Oleh Sistem AI
+          updated_by_user_id: null,
         },
         { transaction }
       );

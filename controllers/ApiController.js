@@ -62,12 +62,7 @@ export class ApiController {
         return res.status(401).json({ success: false, message: 'NIM atau Email tidak terdaftar dalam sistem.' });
       }
 
-      if (
-        user.password_hash !== password &&
-        password !== 'password123' &&
-        password !== 'admin123' &&
-        password !== 'mahasiswa123'
-      ) {
+      if (user.password_hash !== password) {
         return res.status(401).json({ success: false, message: 'Kata sandi salah.' });
       }
 
@@ -180,24 +175,40 @@ export class ApiController {
         });
       }
 
-      const fotoUrl = uploadedFile ? `/uploads/${uploadedFile.filename}` : '/uploads/default_damaged.jpg';
-
-      // Generate Ticket Number: TKT-YYYYMMDD-XXXX
-      const today = new Date();
-      const datePart = today.toISOString().slice(0, 10).replace(/-/g, '');
-      const countToday = await Report.count();
-      const ticketNumber = `TKT-${datePart}-${String(countToday + 1).padStart(4, '0')}`;
-
-      const initialStatus = isUrgent ? 'Dugaan Mendesak' : 'Menunggu Analisis AI';
-
       let userId = req.session?.user?.user_id;
       if (!userId) {
         const defaultStudent = await User.findOne({ where: { role: 'mahasiswa' } });
         userId = defaultStudent ? defaultStudent.user_id : 1;
       }
 
+      // Cegah 1 pengguna mengirim laporan ganda untuk fasilitas & lokasi yang sama saat masih aktif
+      const existingActiveReport = await Report.findOne({
+        where: {
+          user_id: userId,
+          kode_lokasi: lokasiSanitized,
+          nama_fasilitas: { [Op.iLike]: fasilitasSanitized },
+          status: { [Op.ne]: 'Selesai' },
+        },
+      });
+
+      if (existingActiveReport) {
+        return res.status(409).json({
+          success: false,
+          message: `Anda sudah memiliki laporan aktif untuk "${fasilitasSanitized}" di "${lokasiSanitized}" (Tiket #${existingActiveReport.ticket_number}).`,
+        });
+      }
+
+      const fotoUrl = uploadedFile ? `/uploads/${uploadedFile.filename}` : '/uploads/default_damaged.jpg';
+
+      // Generate Ticket Number berbasis report_id agar unik saat 2 akun mengirim bersamaan
+      const today = new Date();
+      const datePart = today.toISOString().slice(0, 10).replace(/-/g, '');
+      const tempTicketNumber = `TKT-${datePart}-${Date.now().toString().slice(-6)}`;
+
+      const initialStatus = isUrgent ? 'Dugaan Mendesak' : 'Menunggu Analisis AI';
+
       const report = await Report.create({
-        ticket_number: ticketNumber,
+        ticket_number: tempTicketNumber,
         user_id: userId,
         kode_lokasi: lokasiSanitized,
         nama_fasilitas: fasilitasSanitized,
@@ -206,6 +217,9 @@ export class ApiController {
         is_urgent_claimed: isUrgent,
         status: initialStatus,
       });
+
+      const finalTicketNumber = `TKT-${datePart}-${String(report.report_id).padStart(4, '0')}`;
+      await report.update({ ticket_number: finalTicketNumber });
 
       if (isUrgent) {
         await EmergencyVerification.create({

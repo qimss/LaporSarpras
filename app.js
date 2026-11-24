@@ -16,18 +16,18 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const PORT = process.env.APP_PORT || 3000;
+const PORT = process.env.PORT || process.env.APP_PORT || 3000;
+
+// Trust Proxy untuk deployment di Cloud (Render, Railway, Nginx, Cloudflare)
+app.set('trust proxy', 1);
 
 // 1. CORS & Security
 app.use(
   cors({
-    origin: [
-      'http://localhost:5173',
-      'http://localhost:8443',
-      'http://localhost:3000',
-      'http://127.0.0.1:5173',
-      'http://127.0.0.1:8443',
-    ],
+    origin: (origin, callback) => {
+      // Izinkan permintaan tanpa origin (seperti mobile apps, curl, server-to-server) atau domain mana pun
+      callback(null, true);
+    },
     credentials: true,
   })
 );
@@ -37,13 +37,18 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 
 // 3. Static Files (Uploads, Public)
+const uploadDir = path.join(__dirname, 'public', 'uploads');
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+}
+
 app.use(express.static(path.join(__dirname, 'public')));
-app.use('/uploads', express.static(path.join(__dirname, 'public', 'uploads')));
+app.use('/uploads', express.static(uploadDir));
 
 // 4. Konfigurasi Sesi (Session & RBAC)
 app.use(
   session({
-    secret: 'laporsarpras_umy_secret_key_2026',
+    secret: process.env.SESSION_SECRET || 'laporsarpras_umy_secret_key_2026',
     resave: false,
     saveUninitialized: false,
     cookie: {
@@ -95,7 +100,24 @@ const startServer = async () => {
   console.log('====================================================');
 
   const dbConnected = await testConnection();
-  if (!dbConnected) {
+  if (dbConnected) {
+    try {
+      // Auto-Sync model database (Sangat krusial agar deploy pertama kali langsung berhasil)
+      const { default: models } = await import('./models/index.js');
+      await models.sequelize.sync();
+      console.log('✅ Struktur tabel database siap (auto-sync).');
+
+      // Cek apakah tabel pengguna masih kosong, jika ya otomatis isi data awal
+      const userCount = await models.User.count();
+      if (userCount === 0) {
+        console.log('🌱 Database baru terdeteksi. Menjalankan auto-seeder akun...');
+        const { runSeeder } = await import('./data/seeders.js');
+        await runSeeder();
+      }
+    } catch (syncErr) {
+      console.warn('⚠️ Auto-sync / seeder database:', syncErr.message);
+    }
+  } else {
     console.warn('⚠️ Server tetap berjalan, namun koneksi database mengalami kendala.');
   }
 
@@ -103,7 +125,8 @@ const startServer = async () => {
   initCronJobs();
 
   app.listen(PORT, () => {
-    console.log(`✅ Server Backend API berhasil berjalan aktif!`);
+    console.log(`✅ Server Backend API berhasil berjalan aktif pada port ${PORT}!`);
+    console.log(`🌐 Base URL: http://localhost:${PORT}`);
     console.log(`🌐 Base API: http://localhost:${PORT}/api`);
     console.log(`👤 Auth Me:  http://localhost:${PORT}/api/auth/me`);
     console.log('====================================================');

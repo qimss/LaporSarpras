@@ -447,6 +447,130 @@ export class ApiController {
     }
   }
 
+  static async updateUser(req, res) {
+    try {
+      if (req.session?.user?.role !== 'admin') {
+        return res.status(403).json({
+          success: false,
+          message: 'Akses ditolak: Memerlukan hak akses Admin Sarpras.',
+        });
+      }
+
+      const { userId } = req.params;
+      const member = await User.findByPk(userId);
+      if (!member) {
+        return res.status(404).json({
+          success: false,
+          message: 'Anggota tidak ditemukan.',
+        });
+      }
+
+      const nim = String(req.body.nim ?? member.nim).trim();
+      const nama_lengkap = String(req.body.nama_lengkap ?? member.nama_lengkap)
+        .replace(/[<>"'/`]/g, '')
+        .trim();
+      const email = String(req.body.email ?? member.email).trim().toLowerCase();
+      const role = req.body.role === 'admin' ? 'admin' : 'mahasiswa';
+      const password = String(req.body.password || '').trim();
+
+      if (!nim || !nama_lengkap || !email) {
+        return res.status(400).json({
+          success: false,
+          message: 'NIM/ID, Nama Lengkap, dan Email wajib diisi.',
+        });
+      }
+
+      const duplicate = await User.findOne({
+        where: {
+          user_id: { [Op.ne]: member.user_id },
+          [Op.or]: [{ nim }, { email }],
+        },
+      });
+
+      if (duplicate) {
+        return res.status(409).json({
+          success: false,
+          message: 'NIM/ID atau Email sudah digunakan oleh anggota lain.',
+        });
+      }
+
+      member.nim = nim;
+      member.nama_lengkap = nama_lengkap;
+      member.email = email;
+      member.role = role;
+
+      if (password) {
+        if (password.length < 6) {
+          return res.status(400).json({
+            success: false,
+            message: 'Kata sandi baru minimal 6 karakter.',
+          });
+        }
+        member.password_hash = password;
+      }
+
+      await member.save();
+
+      return res.json({
+        success: true,
+        message: 'Data anggota berhasil diperbarui.',
+        user: {
+          user_id: member.user_id,
+          nim: member.nim,
+          nama_lengkap: member.nama_lengkap,
+          email: member.email,
+          role: member.role,
+        },
+      });
+    } catch (error) {
+      console.error('API updateUser Error:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Gagal memperbarui anggota: ' + error.message,
+      });
+    }
+  }
+
+  static async deleteUser(req, res) {
+    try {
+      if (req.session?.user?.role !== 'admin') {
+        return res.status(403).json({
+          success: false,
+          message: 'Akses ditolak: Memerlukan hak akses Admin Sarpras.',
+        });
+      }
+
+      const { userId } = req.params;
+      if (Number(userId) === Number(req.session?.user?.user_id)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Tidak dapat menghapus akun admin yang sedang digunakan.',
+        });
+      }
+
+      const member = await User.findByPk(userId);
+      if (!member) {
+        return res.status(404).json({
+          success: false,
+          message: 'Anggota tidak ditemukan.',
+        });
+      }
+
+      await member.destroy();
+
+      return res.json({
+        success: true,
+        message: 'Anggota berhasil dihapus.',
+      });
+    } catch (error) {
+      console.error('API deleteUser Error:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Gagal menghapus anggota: ' + error.message,
+      });
+    }
+  }
+
   static async getAdminDashboard(req, res) {
     try {
       if (req.session?.user?.role !== 'admin') {

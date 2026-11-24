@@ -16,6 +16,7 @@ export const MemberManager: React.FC<MemberManagerProps> = ({ onNotify }) => {
   const [members, setMembers] = useState<MemberItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [submitting, setSubmitting] = useState<boolean>(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
 
   const [nim, setNim] = useState<string>('');
   const [namaLengkap, setNamaLengkap] = useState<string>('');
@@ -42,40 +43,72 @@ export const MemberManager: React.FC<MemberManagerProps> = ({ onNotify }) => {
     fetchMembers();
   }, []);
 
-  const handleAddMember = async (e: React.FormEvent) => {
+  const resetForm = () => {
+    setEditingId(null);
+    setNim('');
+    setNamaLengkap('');
+    setEmail('');
+    setPassword('');
+    setRole('mahasiswa');
+  };
+
+  const handleStartEdit = (member: MemberItem) => {
+    setEditingId(member.user_id);
+    setNim(member.nim);
+    setNamaLengkap(member.nama_lengkap);
+    setEmail(member.email);
+    setPassword('');
+    setRole(member.role);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!nim.trim() || !namaLengkap.trim() || !email.trim() || !password.trim()) {
-      onNotify?.('NIM/ID, Nama Lengkap, Email, dan Kata Sandi wajib diisi.', 'error');
+
+    if (!nim.trim() || !namaLengkap.trim() || !email.trim()) {
+      onNotify?.('NIM/ID, Nama Lengkap, dan Email wajib diisi.', 'error');
+      return;
+    }
+
+    if (editingId === null && !password.trim()) {
+      onNotify?.('Kata Sandi wajib diisi untuk anggota baru.', 'error');
       return;
     }
 
     setSubmitting(true);
     try {
-      const res = await fetch('/api/users', {
-        method: 'POST',
+      const url = editingId !== null ? `/api/users/${editingId}` : '/api/users';
+      const method = editingId !== null ? 'PUT' : 'POST';
+
+      const payload: Record<string, string> = {
+        nim: nim.trim(),
+        nama_lengkap: namaLengkap.trim(),
+        email: email.trim(),
+        role,
+      };
+      if (password.trim()) {
+        payload.password = password.trim();
+      }
+
+      const res = await fetch(url, {
+        method,
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({
-          nim: nim.trim(),
-          nama_lengkap: namaLengkap.trim(),
-          email: email.trim(),
-          password: password.trim(),
-          role,
-        }),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
 
       if (!res.ok || !data.success) {
-        onNotify?.(data.message || 'Gagal menambahkan anggota.', 'error');
+        onNotify?.(data.message || 'Gagal menyimpan data anggota.', 'error');
         return;
       }
 
-      onNotify?.(`Anggota "${data.user.nama_lengkap}" berhasil ditambahkan!`, 'success');
-      setNim('');
-      setNamaLengkap('');
-      setEmail('');
-      setPassword('');
-      setRole('mahasiswa');
+      onNotify?.(
+        editingId !== null
+          ? `Anggota "${data.user.nama_lengkap}" berhasil diperbarui.`
+          : `Anggota "${data.user.nama_lengkap}" berhasil ditambahkan.`,
+        'success'
+      );
+      resetForm();
       await fetchMembers();
     } catch {
       onNotify?.('Gagal terhubung ke server.', 'error');
@@ -84,10 +117,38 @@ export const MemberManager: React.FC<MemberManagerProps> = ({ onNotify }) => {
     }
   };
 
+  const handleDelete = async (member: MemberItem) => {
+    const confirmed = window.confirm(
+      `Hapus anggota "${member.nama_lengkap}" (${member.nim})?`
+    );
+    if (!confirmed) return;
+
+    try {
+      const res = await fetch(`/api/users/${member.user_id}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        onNotify?.(data.message || 'Gagal menghapus anggota.', 'error');
+        return;
+      }
+
+      if (editingId === member.user_id) {
+        resetForm();
+      }
+      onNotify?.(`Anggota "${member.nama_lengkap}" berhasil dihapus.`, 'success');
+      await fetchMembers();
+    } catch {
+      onNotify?.('Gagal terhubung ke server.', 'error');
+    }
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
       <form
-        onSubmit={handleAddMember}
+        onSubmit={handleSubmit}
         style={{
           backgroundColor: '#FFFFFF',
           border: '1.5px solid #E2E8F0',
@@ -101,10 +162,12 @@ export const MemberManager: React.FC<MemberManagerProps> = ({ onNotify }) => {
       >
         <div style={{ gridColumn: '1 / -1' }}>
           <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 800, color: '#0F172A' }}>
-            Tambah Anggota Baru
+            {editingId !== null ? 'Edit Data Anggota' : 'Tambah Anggota Baru'}
           </h3>
           <p style={{ margin: '4px 0 0', fontSize: '13.5px', color: '#64748B' }}>
-            Daftarkan akun mahasiswa atau staf/admin Sarpras baru ke sistem.
+            {editingId !== null
+              ? 'Perbarui informasi anggota. Kosongkan kata sandi jika tidak ingin mengubahnya.'
+              : 'Daftarkan akun mahasiswa atau staf/admin Sarpras baru ke sistem.'}
           </p>
         </div>
 
@@ -170,13 +233,13 @@ export const MemberManager: React.FC<MemberManagerProps> = ({ onNotify }) => {
 
         <div>
           <label style={{ display: 'block', fontSize: '13.5px', fontWeight: 700, color: '#0F172A', marginBottom: '6px' }}>
-            Kata Sandi *
+            {editingId !== null ? 'Kata Sandi Baru (Opsional)' : 'Kata Sandi *'}
           </label>
           <input
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            placeholder="Minimal 6 karakter"
+            placeholder={editingId !== null ? 'Kosongkan jika tidak diubah' : 'Minimal 6 karakter'}
             style={{
               width: '100%',
               padding: '10px 12px',
@@ -210,12 +273,12 @@ export const MemberManager: React.FC<MemberManagerProps> = ({ onNotify }) => {
           </select>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: '8px' }}>
           <button
             type="submit"
             disabled={submitting}
             style={{
-              width: '100%',
+              flex: 1,
               padding: '11px 16px',
               borderRadius: '10px',
               border: 'none',
@@ -226,8 +289,31 @@ export const MemberManager: React.FC<MemberManagerProps> = ({ onNotify }) => {
               cursor: submitting ? 'not-allowed' : 'pointer',
             }}
           >
-            {submitting ? 'Menyimpan...' : '+ Tambah Anggota'}
+            {submitting
+              ? 'Menyimpan...'
+              : editingId !== null
+              ? 'Simpan Perubahan'
+              : '+ Tambah Anggota'}
           </button>
+
+          {editingId !== null && (
+            <button
+              type="button"
+              onClick={resetForm}
+              style={{
+                padding: '11px 14px',
+                borderRadius: '10px',
+                border: '1.5px solid #CBD5E1',
+                backgroundColor: '#FFFFFF',
+                color: '#334155',
+                fontWeight: 700,
+                fontSize: '14px',
+                cursor: 'pointer',
+              }}
+            >
+              Batal
+            </button>
+          )}
         </div>
       </form>
 
@@ -253,6 +339,7 @@ export const MemberManager: React.FC<MemberManagerProps> = ({ onNotify }) => {
                 <th style={{ padding: '10px 8px' }}>Nama Lengkap</th>
                 <th style={{ padding: '10px 8px' }}>Email</th>
                 <th style={{ padding: '10px 8px' }}>Role</th>
+                <th style={{ padding: '10px 8px', textAlign: 'right' }}>Aksi</th>
               </tr>
             </thead>
             <tbody>
@@ -274,6 +361,41 @@ export const MemberManager: React.FC<MemberManagerProps> = ({ onNotify }) => {
                     >
                       {m.role === 'admin' ? 'Admin' : 'Mahasiswa'}
                     </span>
+                  </td>
+                  <td style={{ padding: '10px 8px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    <button
+                      type="button"
+                      onClick={() => handleStartEdit(m)}
+                      style={{
+                        padding: '6px 11px',
+                        borderRadius: '8px',
+                        border: '1px solid #CBD5E1',
+                        backgroundColor: '#FFFFFF',
+                        color: '#0F172A',
+                        fontSize: '12.5px',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        marginRight: '6px',
+                      }}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(m)}
+                      style={{
+                        padding: '6px 11px',
+                        borderRadius: '8px',
+                        border: '1px solid #FCA5A5',
+                        backgroundColor: '#FEF2F2',
+                        color: '#DC2626',
+                        fontSize: '12.5px',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Hapus
+                    </button>
                   </td>
                 </tr>
               ))}

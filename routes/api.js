@@ -33,5 +33,7 @@ router.post('/admin/reports/:reportId/unlink', ApiController.unlinkCluster);
 // ==========================================
 router.get('/users', ApiController.getUsers);
 router.post('/users', ApiController.createUser);
+router.put('/users/:userId', ApiController.updateUser);
+router.delete('/users/:userId', ApiController.deleteUser);
 
 export default router;
